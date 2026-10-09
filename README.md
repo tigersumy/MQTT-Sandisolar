@@ -113,3 +113,11 @@ node server.js
 | **231** | `uint8` | Read-only | Onboard Bluetooth Enabled | `0` = Off, `1` = On |
 
 *Note: System configuration flags like Bluetooth and Buzzer accept remote commands to disable (`0`), but the inverter firmware blocks remote enabling (`1`) via the Modbus interface for local security reasons (returning Modbus exception 3). They are therefore configured as read-only diagnostic binary sensors.*
+
+---
+
+## 🙏 Acknowledgements & Credits
+
+Special thanks to [@bootuz-dinamon](https://github.com/bootuz-dinamon) for the foundational reverse engineering and research on the Sandisolar / Aohai inverter Modbus protocol:
+* **Repository:** [Sandisolar-Aohai-AO-6KSL-G3-Home-Assistant-integration](https://github.com/bootuz-dinamon/Sandisolar-Aohai-AO-6KSL-G3-Home-Assistant-integration)
+* The Modbus register mapping, protocol specifications, and integration findings provided in their work served as an essential reference for building this standalone MQTT controller and dashboard.

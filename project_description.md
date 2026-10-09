@@ -135,3 +135,11 @@ graph TD
 * **Стан перемикача:** `GET http://<ESP32_IP>/switch/power_switch`
 
 Детальні інструкції для ШІ-агента задокументовані у файлі `HERMES_INSTRUCTION.md`.
+
+---
+
+## 7. Подяки та першоджерела (Credits)
+
+Висловлюємо щиру подяку автору [@bootuz-dinamon](https://github.com/bootuz-dinamon) за чудову дослідницьку роботу та реверс-інжиніринг протоколу Modbus для гібридних інверторів Sandisolar / Aohai:
+* **Репозиторій:** [Sandisolar-Aohai-AO-6KSL-G3-Home-Assistant-integration](https://github.com/bootuz-dinamon/Sandisolar-Aohai-AO-6KSL-G3-Home-Assistant-integration)
+* Складена автором карта регістрів Modbus, аналіз роботи протоколу та первинні напрацювання стали фундаментальною базою та надійним орієнтиром для створення цієї автономної системи керування через MQTT.
