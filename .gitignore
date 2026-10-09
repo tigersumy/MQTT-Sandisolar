@@ -1,0 +1,18 @@
+# Dependencies
+node_modules/
+venv/
+venv_libs/
+
+# Logs and databases
+logs/
+*.log
+tuya_power_log.json*
+
+# Local configuration and build artifacts
+.esphome/
+secrets.yaml
+.env
+
+# System files
+.DS_Store
+Thumbs.db

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Antigravity // Inverter MQTT Monitor</title>
+  <!-- Google Fonts: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Ambient background glow elements -->
+  <div class="glow-bg glow-primary"></div>
+  <div class="glow-bg glow-secondary"></div>
+
+  <div class="app-container">
+    <!-- Main Header -->
+    <header class="app-header">
+      <div class="brand">
+        <span class="brand-badge">PRO</span>
+        <h1>ANTIGRAVITY</h1>
+        <span class="brand-divider">//</span>
+        <h2>Inverter Telemetry Sniffer</h2>
+      </div>
+      <div class="status-panel">
+        <div class="status-pill" id="ws-status">
+          <span class="status-dot"></span>
+          WebSocket: <span class="status-text">Підключення...</span>
+        </div>
+        <div class="status-pill" id="mqtt-status">
+          <span class="status-dot"></span>
+          Inverter WiFi: <span class="status-text">Очікування...</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Dashboard Content Grid -->
+    <div class="dashboard-grid">
+      
+      <!-- LEFT PANEL: Config & Control -->
+      <aside class="sidebar-panel">
+        
+        <!-- Broker Config Card -->
+        <section class="card glass-card config-card">
+          <h3 class="card-title">Налаштування MQTT-брокера</h3>
+          <p class="card-subtitle">Введіть ці дані в веб-інтерфейсі інвертора (Tri-Party System):</p>
+          <div class="config-details">
+            <div class="config-row">
+              <span class="label">Server IP:</span>
+              <span class="value highlight-text" id="broker-ip">Завантаження...</span>
+            </div>
+            <div class="config-row">
+              <span class="label">Port:</span>
+              <span class="value" id="broker-port">1883</span>
+            </div>
+            <div class="config-row">
+              <span class="label">ClientID:</span>
+              <span class="value text-mono">sandisolar_inv</span>
+            </div>
+            <div class="config-row">
+              <span class="label">Account (User):</span>
+              <span class="value text-mono" id="broker-user">sandisolar_inv</span>
+            </div>
+            <div class="config-row">
+              <span class="label">Password:</span>
+              <span class="value text-mono" id="broker-pass">••••••••</span>
+            </div>
+          </div>
+          <div class="alert alert-info">
+            <strong>Publish Topic:</strong> antigravity/inverter/telemetry<br>
+            <strong>Subscribe Topic:</strong> antigravity/inverter/command
+          </div>
+        </section>
+
+        <!-- Command Panel -->
+        <section class="card glass-card command-card">
+          <h3 class="card-title">Панель керування (Команди)</h3>
+          <p class="card-subtitle">Тестування відправки команд в топік command</p>
+          
+          <form id="command-form" class="form-container">
+            <div class="form-group">
+              <label for="cmd-register">Регістр (Параметр):</label>
+              <select id="cmd-register">
+                <option value="207" data-default="1">207 — Вбудований зумер (Пищалка)</option>
+                <option value="182" data-default="1">182 — Пріоритет виходу (0: SBU, 1: SUB, 2: USB)</option>
+                <option value="181" data-default="2">181 — Пріоритет зарядки (0: PV, 1: PV+Grid, 2: Only PV)</option>
+                <option value="129" data-default="30">129 — Макс. струм заряду (10-120 А)</option>
+                <option value="189" data-default="10">189 — Макс. струм заряду від мережі (0-100 А)</option>
+                <option value="custom">-- Інший регістр (ручний ввід) --</option>
+              </select>
+            </div>
+
+            <div class="form-group hidden" id="custom-register-group">
+              <label for="custom-register-input">Номер кастомного регістра:</label>
+              <input type="number" id="custom-register-input" placeholder="Напр. 226" min="0" max="65535">
+            </div>
+
+            <div class="form-group">
+              <label for="cmd-value">Значення для запису:</label>
+              <input type="number" id="cmd-value" value="1" placeholder="Числове значення">
+            </div>
+
+            <div class="form-group">
+              <label for="cmd-format">Формат корисного навантаження (Payload):</label>
+              <select id="cmd-format">
+                <option value="json_kv" selected>JSON: {"регістр": значення} (Напр. {"207":1})</option>
+                <option value="json_detailed">JSON детальний: {"register": Р, "value": З}</option>
+                <option value="raw_number">Чистий номер (Напр. 1)</option>
+                <option value="raw_string">Рядок тексту (Напр. "1")</option>
+              </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="btn-send">
+              <span>Надіслати команду</span>
+              <div class="btn-glow"></div>
+            </button>
+          </form>
+          
+          <div id="command-result" class="command-result"></div>
+        </section>
+
+      </aside>
+
+      <!-- CENTER PANEL: Live Decoded Data Grid -->
+      <main class="main-content">
+        <section class="card glass-card data-card">
+          <div class="data-card-header">
+            <div>
+              <h3 class="card-title">Декодовані дані телеметрії</h3>
+              <p class="card-subtitle">Modbus-регістри, автоматично зчитані з конфігураційного файлу</p>
+            </div>
+            <div class="search-box">
+              <input type="text" id="register-search" placeholder="Пошук за назвою або адресою...">
+              <span class="search-icon">🔍</span>
+            </div>
+          </div>
+
+          <div class="telemetry-table-wrapper">
+            <table class="telemetry-table">
+              <thead>
+                <tr>
+                  <th class="col-addr">Регістр</th>
+                  <th class="col-name">Параметр</th>
+                  <th class="col-val">Значення (Декодоване)</th>
+                  <th class="col-raw">Сире значення</th>
+                  <th class="col-type">Тип регістра</th>
+                  <th class="col-time">Оновлено</th>
+                </tr>
+              </thead>
+              <tbody id="telemetry-body">
+                <tr class="empty-row">
+                  <td colspan="6">
+                    <div class="waiting-telemetry">
+                      <div class="spinner"></div>
+                      <p>Очікування першого пакету телеметрії від інвертора...</p>
+                      <span class="sub">Підпишіться на топік telemetry та переконайтеся, що інвертор підключений</span>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+
+      <!-- RIGHT PANEL: Live Console Logs -->
+      <section class="card glass-card console-panel">
+        <div class="console-header">
+          <h3 class="card-title">MQTT Консоль & Логи</h3>
+          <div class="console-actions">
+            <button id="btn-clear-console" class="btn btn-sm btn-secondary">Очистити</button>
+          </div>
+        </div>
+        <div class="console-container">
+          <div class="console-log" id="console-log">
+            <div class="log-line system-line">[Система] Застосунок ініціалізовано. Очікування зв'язку з бекендом...</div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
