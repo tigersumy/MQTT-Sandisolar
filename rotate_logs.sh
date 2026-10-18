@@ -1,30 +1,31 @@
 #!/bin/bash
 
-# Directory containing the logs
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LOG_DIR="${LOG_DIR:-$SCRIPT_DIR/logs}"
 MAX_SIZE_BYTES=5242880 # 5 MB
 BACKUP_COUNT=3
 
-# Files to rotate
-LOG_FILES=(
-    "monitor_stdout.log"
-    "monitor_stderr.log"
-    "launchd_stdout.log"
-    "launchd_stderr.log"
+# Files to rotate (supports full paths or files in LOG_DIR)
+TARGET_FILES=(
+    "$LOG_DIR/monitor_stdout.log"
+    "$LOG_DIR/monitor_stderr.log"
+    "$LOG_DIR/launchd_stdout.log"
+    "$LOG_DIR/launchd_stderr.log"
+    "/private/tmp/zigbee2mqtt.log"
+    "/private/tmp/zigbee2mqtt.err"
 )
 
 echo "=== Log Rotation Started at $(date) ==="
 
-for FILE_NAME in "${LOG_FILES[@]}"; do
-    FILE_PATH="$LOG_DIR/$FILE_NAME"
+for FILE_PATH in "${TARGET_FILES[@]}"; do
+    FILE_NAME=$(basename "$FILE_PATH")
     
     if [ -f "$FILE_PATH" ]; then
         FILE_SIZE=$(wc -c < "$FILE_PATH")
-        echo "Checking $FILE_NAME: size is $FILE_SIZE bytes (threshold: $MAX_SIZE_BYTES)"
+        echo "Checking $FILE_PATH: size is $FILE_SIZE bytes (threshold: $MAX_SIZE_BYTES)"
         
         if [ "$FILE_SIZE" -gt "$MAX_SIZE_BYTES" ]; then
-            echo "Rotating $FILE_NAME..."
+            echo "Rotating $FILE_PATH..."
             
             # Remove the oldest backup if it exists
             if [ -f "$FILE_PATH.$BACKUP_COUNT" ]; then
@@ -43,13 +44,20 @@ for FILE_NAME in "${LOG_FILES[@]}"; do
             cp -p "$FILE_PATH" "$FILE_PATH.1"
             : > "$FILE_PATH"
             
-            echo "Rotation of $FILE_NAME completed."
+            echo "Rotation of $FILE_PATH completed."
         else
-            echo "Rotation skipped for $FILE_NAME (size below threshold)."
+            echo "Rotation skipped for $FILE_PATH (size below threshold)."
         fi
     else
-        echo "File $FILE_NAME does not exist. Skipping."
+        echo "File $FILE_PATH does not exist. Skipping."
     fi
 done
+
+# Clean up Zigbee2MQTT log folders older than 7 days
+Z2M_LOG_DIR="/Users/ihormchakraborty/Zigbee2MQTT/data/log"
+if [ -d "$Z2M_LOG_DIR" ]; then
+    echo "Cleaning up Zigbee2MQTT log folders older than 7 days..."
+    find "$Z2M_LOG_DIR" -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf {} +
+fi
 
 echo "=== Log Rotation Finished ==="

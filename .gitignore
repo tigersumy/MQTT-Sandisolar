@@ -2,6 +2,7 @@
 node_modules/
 venv/
 venv_libs/
+.venv*/
 
 # Logs and databases
 logs/
@@ -12,6 +13,32 @@ tuya_power_log.json*
 .esphome/
 secrets.yaml
 .env
+
+# Backups and archives
+backup_*/
+*.tar.gz
+*.zip
+homebridge_config_backup.json
+scratch/
+
+# Separate BMS and Adapter projects (in their own repositories)
+datouboss.yml
+custom_datouboss.*
+growatt_bms_server.h
+components/
+web_dashboard/
+run_dashboard.sh
+DATOUBOSS_*
+JKBMS_*
+UNIVERSAL_BMS_*
+Daly*
+DAly*
+Jiabaida*
+esp32c6_universal_bms_monitor/
+esp32s3_universal_bms_monitor/
+esp32s3_jkbms_adapter/
+ESP32_S3_Tailscale_Dongle_Project/
+JBD-bms-emulator/
 
 # System files
 .DS_Store
