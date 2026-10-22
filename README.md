@@ -1,5 +1,7 @@
 # Standalone Integration: ESP32 + SandiSolar / Aohai Inverter Telemetry & Control
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 This project provides a standalone integration for **SandiSolar / Aohai (6kW and similar models)** hybrid inverters. It enables reading telemetry and controlling settings directly over **RS-485 Modbus RTU** using an ESP32 microcontroller, publishing telemetry to a local MQTT broker, and rendering a real-time web dashboard without relying on Home Assistant.
 
 ---
@@ -121,3 +123,9 @@ node server.js
 Special thanks to [@bootuz-dinamon](https://github.com/bootuz-dinamon) for the foundational reverse engineering and research on the Sandisolar / Aohai inverter Modbus protocol:
 * **Repository:** [Sandisolar-Aohai-AO-6KSL-G3-Home-Assistant-integration](https://github.com/bootuz-dinamon/Sandisolar-Aohai-AO-6KSL-G3-Home-Assistant-integration)
 * The Modbus register mapping, protocol specifications, and integration findings provided in their work served as an essential reference for building this standalone MQTT controller and dashboard.
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

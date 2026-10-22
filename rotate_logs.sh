@@ -54,7 +54,7 @@ for FILE_PATH in "${TARGET_FILES[@]}"; do
 done
 
 # Clean up Zigbee2MQTT log folders older than 7 days
-Z2M_LOG_DIR="/Users/ihormchakraborty/Zigbee2MQTT/data/log"
+Z2M_LOG_DIR="${Z2M_LOG_DIR:-$HOME/Zigbee2MQTT/data/log}"
 if [ -d "$Z2M_LOG_DIR" ]; then
     echo "Cleaning up Zigbee2MQTT log folders older than 7 days..."
     find "$Z2M_LOG_DIR" -mindepth 1 -maxdepth 1 -type d -mtime +7 -exec rm -rf {} +

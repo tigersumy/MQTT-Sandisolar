@@ -16,5 +16,5 @@
     "ws": "^8.17.0"
   },
   "author": "Antigravity",
-  "license": "ISC"
+  "license": "MIT"
 }
