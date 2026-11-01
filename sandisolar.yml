@@ -121,7 +121,7 @@ sensor:
     filters:
       - multiply: 0.1               # Множник 0.1W з документації
 
-  # Температура інвертора
+  # Температура інвертора (T1 - Радіатор)
   - platform: modbus_controller
     modbus_controller_id: inverter
     name: "Temp Inverter"
@@ -131,10 +131,13 @@ sensor:
     value_type: S_WORD
     unit_of_measurement: "°C"
     accuracy_decimals: 1
+    device_class: temperature
+    state_class: measurement
+    icon: "mdi:thermometer"
     filters:
       - multiply: 0.1
 
-  # Температура IPM
+  # Температура IPM (T2 - Boost / IPM / IGBT)
   - platform: modbus_controller
     modbus_controller_id: inverter
     name: "Temp Boost"
@@ -144,6 +147,9 @@ sensor:
     value_type: S_WORD
     unit_of_measurement: "°C"
     accuracy_decimals: 1
+    device_class: temperature
+    state_class: measurement
+    icon: "mdi:thermometer"
     filters:
       - multiply: 0.1
 
@@ -216,10 +222,28 @@ sensor:
   # Розрахунок потужності PV1
   - platform: template
     name: "PV1 Power"
+    id: pv1_power
     unit_of_measurement: "W"
     accuracy_decimals: 0
+    update_interval: 2s
     lambda: |-
       return id(pv1_voltage).state * id(pv1_current).state;
+
+  # Розрахунок потужності на вході мережі (Grid Power)
+  - platform: template
+    name: "Grid Power"
+    id: grid_power
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    icon: "mdi:transmission-tower"
+    update_interval: 2s
+    lambda: |-
+      if (isnan(id(grid_voltage).state) || isnan(id(grid_current).state) || id(grid_voltage).state < 50.0f) {
+        return 0.0f;
+      }
+      return id(grid_voltage).state * id(grid_current).state;
 
 
       
@@ -257,7 +281,7 @@ sensor:
         then:
           - if:
               condition:
-                lambda: 'return id(output_priority_select).state != "Utility-Solar-Battery (UTI)";'
+                lambda: 'return id(output_priority_select).current_option() != "Utility-Solar-Battery (UTI)";'
               then:
                 - select.set:
                     id: output_priority_select
@@ -270,7 +294,7 @@ sensor:
         then:
           - if:
               condition:
-                lambda: 'return id(charge_priority_select).state != "Solar & Utility (SNU)";'
+                lambda: 'return id(charge_priority_select).current_option() != "Solar & Utility (SNU)";'
               then:
                 - select.set:
                     id: charge_priority_select
@@ -283,7 +307,7 @@ sensor:
         then:
           - if:
               condition:
-                lambda: 'return id(charge_priority_select).state == "Solar & Utility (SNU)";'
+                lambda: 'return id(charge_priority_select).current_option() == "Solar & Utility (SNU)";'
               then:
                 - select.set:
                     id: charge_priority_select
@@ -296,7 +320,7 @@ sensor:
         then:
           - if:
               condition:
-                lambda: 'return id(output_priority_select).state == "Utility-Solar-Battery (UTI)";'
+                lambda: 'return id(output_priority_select).current_option() == "Utility-Solar-Battery (UTI)";'
               then:
                 - select.set:
                     id: output_priority_select
@@ -474,21 +498,27 @@ sensor:
 #    value_type: U_WORD
 #    icon: "mdi:battery-refresh"
 
-# 2. Температура батареї від BMS (Регістр 142)
+# 2. Температура батареї від BMS (T4 - BMS, Регістр 142)
   - platform: modbus_controller
     modbus_controller_id: inverter
     name: "BMS Battery Temperature"
+    id: bms_battery_temperature
     address: 142
     register_type: read
     value_type: S_WORD
     unit_of_measurement: "°C"
+    accuracy_decimals: 1
     device_class: temperature
+    state_class: measurement
+    icon: "mdi:thermometer"
     filters:
       - multiply: 0.1
 
+  # Температура LLC (T3 - Трансформатор / LLC, Регістр 12)
   - platform: modbus_controller
     modbus_controller_id: inverter
     name: "Temp LLC"
+    id: llc_temp
     address: 12
     register_type: read      # Читаємо як Input Register
     value_type: S_WORD       # 16-бітне число зі знаком (sint16)

@@ -1,4 +1,5 @@
-document.addEventListener('DOMContentLoaded', () => {
+function initCustomDashboard() {
+  if (document.getElementById('custom-dashboard')) return;
   // Create dashboard wrapper
   const root = document.createElement('div');
   root.id = 'custom-dashboard';
@@ -62,12 +63,13 @@ document.addEventListener('DOMContentLoaded', () => {
   ];
 
   const diagnosticParams = [
-    { id: 'sensor-boost_temp', name: 'Температура Boost', unit: '°C' },
-    { id: 'sensor-inverter_temp', name: 'Температура інвертора', unit: '°C' },
-    { id: 'sensor-temp_llc', name: 'Температура LLC', unit: '°C' },
+    { id: 'sensor-temp_inverter', name: 'T1 — Температура інвертора (радіатора)', unit: '°C' },
+    { id: 'sensor-temp_boost', name: 'T2 — Температура Boost / IPM (DC-DC / IGBT)', unit: '°C' },
+    { id: 'sensor-temp_llc', name: 'T3 — Температура LLC (трансформатора)', unit: '°C' },
+    { id: 'sensor-bms_battery_temperature', name: 'T4 — Температура акумулятора (BMS)', unit: '°C' },
     { id: 'text_sensor-inverter_cloud_connection_status', name: 'Зв\'язок з хмарою' },
     { id: 'text_sensor-inverter_logger_internal_comm_status', name: 'Внутрішній зв\'язок логера' },
-    { id: 'text_sensor-parallel_mode', name: 'Режим паралельної роботи' },
+    { id: 'select-inverter_parallel_mode', name: 'Режим паралельної роботи' },
     { id: 'sensor-total_operation_time', name: 'Загальний час роботи', unit: 'h' }
   ];
 
@@ -181,8 +183,8 @@ document.addEventListener('DOMContentLoaded', () => {
              <div class="flow-node" id="node-grid">
                <span class="node-icon">🔌</span>
                <span class="node-name">Міська мережа</span>
-               <span class="node-value" id="flow-grid-volt">0.0 V</span>
-               <span class="node-sub" id="flow-grid-freq">0.00 Hz</span>
+               <span class="node-value" id="flow-grid-power">0 W</span>
+               <span class="node-sub" id="flow-grid-volt">0.0 V (0.00 Hz)</span>
              </div>
 
             <!-- Load Node -->
@@ -381,7 +383,7 @@ document.addEventListener('DOMContentLoaded', () => {
           </label>
         `;
       } else if (param.type === 'binary_sensor') {
-        controlHtml = `<span class="param-value" id="val-${param.id}">OFF</span>`;
+        controlHtml = `<span class="param-value val-${param.id}" id="val-${param.id}">OFF</span>`;
       } else if (param.type === 'select') {
         const optionOpts = param.options.map(opt => `<option value="${opt}">${opt}</option>`).join('');
         controlHtml = `
@@ -401,7 +403,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Standard Read-only sensors
         controlHtml = `
           <div class="param-value-container">
-            <span class="param-value" id="val-${param.id}">-</span>
+            <span class="param-value val-${param.id}" id="val-${param.id}">-</span>
             ${param.unit ? `<span class="param-unit">${param.unit}</span>` : ''}
           </div>
         `;
@@ -433,6 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Append Grid cards inside Overview tab
   appendOverviewItem(overviewGridList, 'sensor-grid_voltage', 'Grid Voltage (Напруга мережі)', 'V');
   appendOverviewItem(overviewGridList, 'sensor-grid_current', 'Grid Current (Струм мережі)', 'A');
+  appendOverviewItem(overviewGridList, 'sensor-grid_power', 'Grid Power (Потужність мережі на вході)', 'W');
   appendOverviewItem(overviewGridList, 'sensor-grid_frequency', 'Grid Frequency (Частота)', 'Hz');
 
   appendOverviewItem(overviewBatteryList, 'sensor-battery_voltage', 'Battery Voltage (Напруга)', 'V');
@@ -450,7 +453,7 @@ document.addEventListener('DOMContentLoaded', () => {
     item.innerHTML = `
       <span class="param-name">${name}</span>
       <div class="param-value-container">
-        <span class="param-value" id="overview-val-${id}">-</span>
+        <span class="param-value val-${id}" id="overview-val-${id}">-</span>
         ${unit ? `<span class="param-unit">${unit}</span>` : ''}
       </div>
     `;
@@ -474,10 +477,28 @@ document.addEventListener('DOMContentLoaded', () => {
     addTerminalLog('EventSource connection lost. Attempting reconnect...', 'error');
   };
 
+  // Helper to safely convert raw entity ID/domain/name into canonical DOM id slug
+  function normalizeId(id, domain, name) {
+    if (domain && name) {
+      return domain + '-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    }
+    if (typeof id === 'string') {
+      if (id.includes('-') && !id.includes('/') && !id.includes(' ')) {
+        return id;
+      }
+      return id.toLowerCase().replace(/\s*\/\s*/g, '-').replace(/[^a-z0-9_-]+/g, '_');
+    }
+    return String(id || '');
+  }
+
   eventSource.addEventListener('state', (e) => {
     try {
       const data = JSON.parse(e.data);
-      updateEntityState(data.id, data.state, data.value);
+      const slugId = normalizeId(data.id, data.domain, data.name);
+      updateEntityState(slugId, data.state, data.value);
+      if (data.id && data.id !== slugId) {
+        updateEntityState(data.id, data.state, data.value);
+      }
     } catch (err) {
       console.error('Error parsing SSE event data:', err);
     }
@@ -488,42 +509,68 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // Update Entity Value and UI dynamically
-  function updateEntityState(id, stateText, val) {
+  function updateEntityState(rawId, stateText, val) {
+    const id = normalizeId(rawId);
     entityStates[id] = { state: stateText, value: val };
-    
-    // Update simple value labels
-    const label = document.getElementById(`val-${id}`);
-    if (label) {
-      label.innerText = stateText;
-      // Alert colors for critical items
-      if (id === 'sensor-battery_soc') {
-        const numericSoc = parseFloat(val);
-        label.className = 'param-value';
-        if (numericSoc <= 20) label.classList.add('val-alert-red');
-        else if (numericSoc <= 50) label.classList.add('val-alert-orange');
-        else label.classList.add('val-alert-green');
-      }
+    if (rawId && rawId !== id) {
+      entityStates[rawId] = { state: stateText, value: val };
     }
 
-    // Update Overview duplicate labels
-    const overviewLabel = document.getElementById(`overview-val-${id}`);
-    if (overviewLabel) {
-      overviewLabel.innerText = stateText;
+    // ID Aliases mapping for backward / naming compatibility
+    const targetIds = [id];
+    const aliases = {
+      'sensor-temp_inverter': ['sensor-inverter_temp'],
+      'sensor-inverter_temp': ['sensor-temp_inverter'],
+      'sensor-temp_boost': ['sensor-boost_temp'],
+      'sensor-boost_temp': ['sensor-temp_boost'],
+      'select-inverter_parallel_mode': ['text_sensor-parallel_mode']
+    };
+    if (aliases[id]) {
+      targetIds.push(...aliases[id]);
     }
 
-    // Update form controls based on type
-    const toggleInput = document.getElementById(`input-${id}`);
-    if (toggleInput) {
-      if (id.startsWith('switch')) {
-        toggleInput.checked = (stateText.toUpperCase() === 'ON' || val === true);
-      } else if (id.startsWith('select')) {
-        toggleInput.value = stateText;
-      } else if (id.startsWith('number')) {
-        toggleInput.value = val;
-        const box = document.getElementById(`val-box-${id}`);
-        if (box) box.innerText = val;
+    const safeText = (stateText !== undefined && stateText !== null) ? String(stateText) : '-';
+
+    targetIds.forEach(targetId => {
+      // 1. Update all value elements using getElementsByClassName (completely safe, no querySelector syntax errors)
+      const elements = document.getElementsByClassName(`val-${targetId}`);
+      for (let i = 0; i < elements.length; i++) {
+        elements[i].innerText = safeText;
+        if (targetId === 'sensor-battery_soc') {
+          const numericSoc = parseFloat(val);
+          elements[i].className = `param-value val-${targetId}`;
+          if (numericSoc <= 20) elements[i].classList.add('val-alert-red');
+          else if (numericSoc <= 50) elements[i].classList.add('val-alert-orange');
+          else elements[i].classList.add('val-alert-green');
+        }
       }
-    }
+
+      // Direct ID fallback update
+      const directVal = document.getElementById(`val-${targetId}`);
+      if (directVal && directVal.innerText !== safeText) {
+        directVal.innerText = safeText;
+      }
+      const directOverview = document.getElementById(`overview-val-${targetId}`);
+      if (directOverview) {
+        directOverview.innerText = safeText;
+      }
+
+      // 2. Update form controls (switches, selects, sliders)
+      const inputElem = document.getElementById(`input-${targetId}`);
+      if (inputElem) {
+        if (targetId.startsWith('switch')) {
+          inputElem.checked = (safeText.toUpperCase() === 'ON' || val === true);
+        } else if (targetId.startsWith('select')) {
+          inputElem.value = stateText;
+        } else if (targetId.startsWith('number')) {
+          inputElem.value = val;
+        }
+      }
+      const boxElem = document.getElementById(`val-box-${targetId}`);
+      if (boxElem && val !== undefined) {
+        boxElem.innerText = val;
+      }
+    });
 
     // Update Dynamic Flow Diagram Values
     if (id === 'sensor-pv1_power') {
@@ -576,9 +623,34 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    // Grid Voltage, Frequency & Power
+    if (id === 'sensor-grid_power') {
+      const flowGridPower = document.getElementById('flow-grid-power');
+      if (flowGridPower) flowGridPower.innerText = stateText;
+      const overviewGridPower = document.getElementById('overview-val-sensor-grid_power');
+      if (overviewGridPower) overviewGridPower.innerText = stateText;
+    }
+
+    if (id === 'sensor-grid_voltage' || id === 'sensor-grid_current') {
+      const v = parseFloat(entityStates['sensor-grid_voltage']?.value !== undefined ? entityStates['sensor-grid_voltage'].value : entityStates['sensor-grid_voltage']?.state || 0);
+      const i = parseFloat(entityStates['sensor-grid_current']?.value !== undefined ? entityStates['sensor-grid_current'].value : entityStates['sensor-grid_current']?.state || 0);
+      const calcPower = (v >= 50 && i > 0) ? Math.round(v * i) : 0;
+      
+      const gridPowerElem = document.getElementById('overview-val-sensor-grid_power');
+      if (gridPowerElem && (!entityStates['sensor-grid_power'] || isNaN(parseFloat(entityStates['sensor-grid_power']?.value)))) {
+        gridPowerElem.innerText = `${calcPower} W`;
+      }
+      const flowPowerElem = document.getElementById('flow-grid-power');
+      if (flowPowerElem && (!entityStates['sensor-grid_power'] || isNaN(parseFloat(entityStates['sensor-grid_power']?.value)))) {
+        flowPowerElem.innerText = `${calcPower} W`;
+      }
+    }
+
     if (id === 'sensor-grid_voltage') {
-      document.getElementById('flow-grid-volt').innerText = stateText;
       const numVal = parseFloat(val);
+      const freqText = entityStates['sensor-grid_frequency']?.state || '';
+      const voltEl = document.getElementById('flow-grid-volt');
+      if (voltEl) voltEl.innerText = freqText ? `${stateText} (${freqText})` : stateText;
       const node = document.getElementById('node-grid');
       const path = document.getElementById('path-grid-inv');
       if (numVal >= 100) {
@@ -591,7 +663,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (id === 'sensor-grid_frequency') {
-      document.getElementById('flow-grid-freq').innerText = stateText;
+      const voltText = entityStates['sensor-grid_voltage']?.state || '';
+      const voltEl = document.getElementById('flow-grid-volt');
+      if (voltEl && voltText) voltEl.innerText = `${voltText} (${stateText})`;
     }
 
     if (id === 'sensor-power_out_load') {
@@ -784,4 +858,10 @@ document.addEventListener('DOMContentLoaded', () => {
     otaProgressContainer.style.display = 'none';
     otaProgressFill.style.width = '0%';
   }
-});
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initCustomDashboard);
+} else {
+  initCustomDashboard();
+}

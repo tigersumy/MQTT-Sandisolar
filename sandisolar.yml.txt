@@ -178,10 +178,28 @@ sensor:
   # Розрахунок потужності PV1
   - platform: template
     name: "PV1 Power"
+    id: pv1_power
     unit_of_measurement: "W"
     accuracy_decimals: 0
+    update_interval: 2s
     lambda: |-
       return id(pv1_voltage).state * id(pv1_current).state;
+
+  # Розрахунок потужності на вході мережі (Grid Power)
+  - platform: template
+    name: "Grid Power"
+    id: grid_power
+    unit_of_measurement: "W"
+    device_class: power
+    state_class: measurement
+    accuracy_decimals: 0
+    icon: "mdi:transmission-tower"
+    update_interval: 2s
+    lambda: |-
+      if (isnan(id(grid_voltage).state) || isnan(id(grid_current).state) || id(grid_voltage).state < 50.0f) {
+        return 0.0f;
+      }
+      return id(grid_voltage).state * id(grid_current).state;
 
 
       
