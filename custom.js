@@ -435,7 +435,7 @@ function initCustomDashboard() {
   // Append Grid cards inside Overview tab
   appendOverviewItem(overviewGridList, 'sensor-grid_voltage', 'Grid Voltage (Напруга мережі)', 'V');
   appendOverviewItem(overviewGridList, 'sensor-grid_current', 'Grid Current (Струм мережі)', 'A');
-  appendOverviewItem(overviewGridList, 'sensor-grid_power', 'Grid Power (Потужність мережі на вході)', 'W');
+  appendOverviewItem(overviewGridList, 'sensor-grid_power', 'Grid Power (Потужність мережі)', 'W');
   appendOverviewItem(overviewGridList, 'sensor-grid_frequency', 'Grid Frequency (Частота)', 'Hz');
 
   appendOverviewItem(overviewBatteryList, 'sensor-battery_voltage', 'Battery Voltage (Напруга)', 'V');
