@@ -15,6 +15,22 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 import urllib.request
 
+# --- Load .env configuration ---
+def _load_env():
+    env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if os.path.isfile(env_file):
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip("'\"")
+                    if k and k not in os.environ:
+                        os.environ[k] = v
+
+_load_env()
+
 # --- Configuration & Constants ---
 MQTT_BROKER = os.getenv("MQTT_BROKER", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
@@ -57,7 +73,8 @@ latest_data = {
 debounce = {
     "last_sample": None,       # "open" (OFF) or "closed" (ON)
     "consecutive_count": 0,
-    "stable_status": "unknown"  # "СВІТЛО Є" or "СВІТЛА НЕМАЄ"
+    "stable_status": "unknown",  # "СВІТЛО Є" or "СВІТЛА НЕМАЄ"
+    "outage_alert_sent": False   # Track if outage notification was sent
 }
 
 # Logger Configuration
@@ -171,6 +188,10 @@ def evaluate_rules(client):
     # Lock stable status on 2 consecutive samples
     if debounce["consecutive_count"] >= 2:
         debounce["stable_status"] = sample_text
+
+    # Reset outage alert flag when power is restored
+    if debounce["stable_status"] == "СВІТЛО Є":
+        debounce["outage_alert_sent"] = False
         
     logger.info(f"Grid Status: {sample_text} ({v_val:.1f}V) | Stable: {debounce['stable_status']} (count={debounce['consecutive_count']}) | Inverter: {'ON' if running_val else 'OFF'} | Battery: {soc_val}%")
     
@@ -178,16 +199,28 @@ def evaluate_rules(client):
     if debounce["stable_status"] == "СВІТЛА НЕМАЄ" and debounce["consecutive_count"] >= 2:
         # OUTAGE LOGIC
         if running_val:
-            # Already ON -> SKIP
-            logger.info("ℹ️ Outage detected, but inverter is already running. Skip.")
+            # Already ON -> Skip command, but notify once if alert wasn't sent yet
+            logger.info("ℹ️ Outage detected, but inverter is already running. Skip command.")
             log_event("trigger_inverter_on_skipped", v_val, "СВІТЛА НЕМАЄ", "skip_already_running")
-            # We don't send Telegram here to avoid spamming
+            if not debounce.get("outage_alert_sent", False):
+                debounce["outage_alert_sent"] = True
+                msg = (
+                    f"⚡ <b>ЗНИКНЕННЯ СВІТЛА (ІНВЕРТОР ВЖЕ ПРАЦЮЄ)</b>\n\n"
+                    f"Причина: 2× «СВІТЛА НЕМАЄ» (зникнення живлення)\n"
+                    f"Датчик: Power\n"
+                    f"Статус: СВІТЛА НЕМАЄ ({v_val:.1f}V)\n"
+                    f"Інвертор: Увімкнений (живить дім)\n"
+                    f"Батарея: {soc_val}%\n"
+                    f"Час: {current_time_str}"
+                )
+                send_telegram(msg)
         else:
             # Try to turn ON
             logger.warning("⚡ Outage detected (2x consecutive СВІТЛА НЕМАЄ). Sending ON command.")
             try:
                 control_inverter(client, turn_on=True)
                 log_event("trigger_inverter_on", v_val, "СВІТЛА НЕМАЄ", "inverter_on")
+                debounce["outage_alert_sent"] = True
                 
                 msg = (
                     f"⚡ <b>ІНВЕРТОР УВІМКНЕНО</b>\n\n"

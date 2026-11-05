@@ -39,6 +39,10 @@ esp32s3_universal_bms_monitor/
 esp32s3_jkbms_adapter/
 ESP32_S3_Tailscale_Dongle_Project/
 JBD-bms-emulator/
+ESP32-S3-Dongle-LCD/
+redodo/
+Communication protocol between monitoring platform and BMS.pdf
+MAX Series Modbus RTU Protocol*.pdf
 
 # System files
 .DS_Store
