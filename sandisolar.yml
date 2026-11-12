@@ -274,58 +274,63 @@ sensor:
     device_class: battery
     state_class: measurement
     accuracy_decimals: 1
-    on_value_range:
-      # Захист від глибокого розряду (SOC < 25%)
-      # Перемикає живлення будинку на Мережу (UTI)
-      - below: 25.0
-        then:
-          - if:
-              condition:
-                lambda: 'return id(output_priority_select).current_option() != "Utility-Solar-Battery (UTI)";'
-              then:
-                - select.set:
-                    id: output_priority_select
-                    option: "Utility-Solar-Battery (UTI)"
-                - logger.log: "Battery SOC is below 25%! Switched Load Priority to UTI (Grid First) for protection."
-      
-      # Аварійна зарядка від мережі (SOC < 15%)
-      # Перемикає зарядку на Solar & Utility (SNU), щоб батарея не відключилася повністю
-      - below: 15.0
-        then:
-          - if:
-              condition:
-                lambda: 'return id(charge_priority_select).current_option() != "Solar & Utility (SNU)";'
-              then:
-                - select.set:
-                    id: charge_priority_select
-                    option: "Solar & Utility (SNU)"
-                - logger.log: "Battery SOC is critical (<15%)! Switched Charge Priority to SNU (Grid + Solar) to force charge."
-
-      # Відновлення після розряду (SOC > 40%)
-      # Повертає звичайний режим заряду Тільки від Сонця (OSO)
-      - above: 40.0
-        then:
-          - if:
-              condition:
-                lambda: 'return id(charge_priority_select).current_option() == "Solar & Utility (SNU)";'
-              then:
-                - select.set:
-                    id: charge_priority_select
-                    option: "Only Solar (OSO)"
-                - logger.log: "Battery SOC recovered (>40%). Restored Charge Priority to OSO (Only Solar)."
-
-      # Відновлення живлення від сонця/аккумулятора (SOC > 50%)
-      # Повертає пріоритет живлення будинку на Solar-Utility-Battery (SBU)
-      - above: 50.0
-        then:
-          - if:
-              condition:
-                lambda: 'return id(output_priority_select).current_option() == "Utility-Solar-Battery (UTI)";'
-              then:
-                - select.set:
-                    id: output_priority_select
-                    option: "Solar-Utility-Battery (SBU)"
-                - logger.log: "Battery SOC recovered (>50%). Restored Load Priority to SBU (Solar First)."
+    # --- ПРАВИЛА АВТОМАТИЧНОГО ПЕРЕМИКАННЯ ПРІОРИТЕТІВ (ОПЦІОНАЛЬНО ДЛЯ СИСТЕМ ІЗ СОНЯЧНИМИ ПАНЕЛЯМИ) ---
+    # ЗА ЗАМОВЧУВАННЯМ ВИМКНЕНО:
+    # Якщо у вас НЕМАЄ сонячних панелей (PV), або система працює в режимі безперебійника (UPS/резерв),
+    # ці правила повинні бути ЗАКОМЕНТОВАНІ! Інакше при SOC > 40% інвертор увімкне режим "Тільки від Сонця (OSO)"
+    # і зупинить зарядку від міської мережі, а при SOC > 50% увімкне SBU і розряджатиме батарею в дім замість мережі.
+    #
+    # Розкоментуйте блок нижче ТІЛЬКИ якщо у вас встановлені сонячні панелі і ви хочете автоматично
+    # перемикати живлення на сонце (SBU) та зарядку тільки від сонця (OSO) в сонячний день:
+    #
+    # on_value_range:
+    #   # Захист від глибокого розряду (SOC < 25%) -> перемикання живлення на мережу (UTI)
+    #   - below: 25.0
+    #     then:
+    #       - if:
+    #           condition:
+    #             lambda: 'return id(output_priority_select).current_option() != "Utility-Solar-Battery (UTI)";'
+    #           then:
+    #             - select.set:
+    #                 id: output_priority_select
+    #                 option: "Utility-Solar-Battery (UTI)"
+    #             - logger.log: "Battery SOC is below 25%! Switched Load Priority to UTI (Grid First) for protection."
+    #   
+    #   # Аварійна зарядка від мережі (SOC < 15%) -> дозволити зарядку від мережі (SNU)
+    #   - below: 15.0
+    #     then:
+    #       - if:
+    #           condition:
+    #             lambda: 'return id(charge_priority_select).current_option() != "Solar & Utility (SNU)";'
+    #           then:
+    #             - select.set:
+    #                 id: charge_priority_select
+    #                 option: "Solar & Utility (SNU)"
+    #             - logger.log: "Battery SOC is critical (<15%)! Switched Charge Priority to SNU (Grid + Solar) to force charge."
+    #
+    #   # Відновлення після розряду (SOC > 40%) -> заряд тільки від сонця (OSO)
+    #   - above: 40.0
+    #     then:
+    #       - if:
+    #           condition:
+    #             lambda: 'return id(charge_priority_select).current_option() == "Solar & Utility (SNU)";'
+    #           then:
+    #             - select.set:
+    #                 id: charge_priority_select
+    #                 option: "Only Solar (OSO)"
+    #             - logger.log: "Battery SOC recovered (>40%). Restored Charge Priority to OSO (Only Solar)."
+    #
+    #   # Відновлення живлення від сонця/аккумулятора (SOC > 50%) -> пріоритет сонця/АКБ (SBU)
+    #   - above: 50.0
+    #     then:
+    #       - if:
+    #           condition:
+    #             lambda: 'return id(output_priority_select).current_option() == "Utility-Solar-Battery (UTI)";'
+    #           then:
+    #             - select.set:
+    #                 id: output_priority_select
+    #                 option: "Solar-Utility-Battery (SBU)"
+    #             - logger.log: "Battery SOC recovered (>50%). Restored Load Priority to SBU (Solar First)."
 
 
 

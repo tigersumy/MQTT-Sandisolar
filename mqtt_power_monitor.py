@@ -74,7 +74,8 @@ debounce = {
     "last_sample": None,       # "open" (OFF) or "closed" (ON)
     "consecutive_count": 0,
     "stable_status": "unknown",  # "СВІТЛО Є" or "СВІТЛА НЕМАЄ"
-    "outage_alert_sent": False   # Track if outage notification was sent
+    "outage_alert_sent": False,  # Track if outage notification was sent
+    "last_battery_alert_step": None  # Track battery low alerts (50, 40, 30, 20, 10)
 }
 
 # Logger Configuration
@@ -195,6 +196,39 @@ def evaluate_rules(client):
         
     logger.info(f"Grid Status: {sample_text} ({v_val:.1f}V) | Stable: {debounce['stable_status']} (count={debounce['consecutive_count']}) | Inverter: {'ON' if running_val else 'OFF'} | Battery: {soc_val}%")
     
+    # 3. Low Battery Step Alert Logic (<= 50%, 40%, 30%, 20%, 10%)
+    LOW_BATTERY_STEPS = [50, 40, 30, 20, 10]
+    last_alert_step = debounce.get("last_battery_alert_step", None)
+    
+    current_step = None
+    for step in LOW_BATTERY_STEPS:
+        if soc_val <= step:
+            current_step = step
+            break
+            
+    if current_step is not None:
+        if last_alert_step is None or current_step < last_alert_step:
+            debounce["last_battery_alert_step"] = current_step
+            emoji = "🪫" if current_step <= 20 else "⚠️"
+            status_desc = "Критичний рівень заряду" if current_step <= 20 else "Низький рівень заряду"
+            msg = (
+                f"{emoji} <b>{status_desc}: АКБ ≤ {current_step}% ({soc_val}%)</b>\n\n"
+                f"🔋 Поточний заряд: {soc_val}%\n"
+                f"⚡ Мережа: {sample_text} ({v_val:.1f}V)\n"
+                f"🔌 Інвертор: {'Увімкнено (генерація)' if running_val else 'Вимкнено (байпас)'}\n"
+                f"🕒 Час: {current_time_str}"
+            )
+            send_telegram(msg)
+            logger.warning(f"{emoji} Low battery alert sent: SOC={soc_val}% (step <={current_step}%)")
+    else:
+        # Reset tracker when SOC recovers above 50% with hysteresis (+3% -> > 53%)
+        if soc_val > 53:
+            debounce["last_battery_alert_step"] = None
+
+    if last_alert_step is not None and current_step is not None and current_step > last_alert_step:
+        if soc_val >= current_step + 4:
+            debounce["last_battery_alert_step"] = current_step
+
     # Process actions based on the 2x consecutive stable status
     if debounce["stable_status"] == "СВІТЛА НЕМАЄ" and debounce["consecutive_count"] >= 2:
         # OUTAGE LOGIC
