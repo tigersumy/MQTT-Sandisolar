@@ -12,29 +12,29 @@
 
 ```mermaid
 graph TD
-    Inverter["Гібридний інвертор Sandisolar"] <-->|RS-485 Modbus RTU| Adapter["XY-485 TTL-to-RS485"]
-    Adapter <-->|UART GPIO 18/19| ESP32["Контролер ESP32 (ESPHome)"]
+    Inverter["Гібридний інвертор Sandisolar"] <-->|"RS-485 Modbus RTU"| Adapter["XY-485 TTL-to-RS485"]
+    Adapter <-->|"UART GPIO 18/19"| ESP32["Контролер ESP32 (ESPHome)"]
     
     subgraph Server["Локальний сервер Mac Mini"]
-        Broker["MQTT Broker Aedes (порт 1883)"]
-        NodeServer["Node.js Сервер та Дашборд (порт 3010)"]
+        Broker["MQTT Broker Aedes (Порт 1883)"]
+        NodeServer["Node.js Сервер та Дашборд (Порт 3010)"]
         Daemon["Python Демон автоматизації (mqtt_power_monitor.py)"]
         TeleBot["Інтерактивний Telegram-бот (telegram_bot.py)"]
         
-        NodeServer <-->|MQTT Telemetry| Broker
-        Daemon <-->|MQTT Pub/Sub & Керування| Broker
-        TeleBot <-->|MQTT Телеметрія| Broker
+        NodeServer <-->|"MQTT Телеметрія"| Broker
+        Daemon <-->|"MQTT Pub/Sub та керування"| Broker
+        TeleBot <-->|"MQTT Телеметрія"| Broker
     end
     
-    ESP32 <-->|Wi-Fi / MQTT| Broker
-    ESP32 -->|HTTP Веб-інтерфейс (порт 80)| User
+    ESP32 <-->|"Wi-Fi / MQTT"| Broker
+    ESP32 -->|"HTTP Веб-інтерфейс: Порт 80"| User["Користувач"]
     
     Telegram["Telegram Cloud Bot API"]
-    Daemon -->|Аварійні сповіщення (Push)| Telegram
-    TeleBot <-->|Двосторонній зв'язок (Long Polling)| Telegram
+    Daemon -->|"Аварійні сповіщення (Push)"| Telegram
+    TeleBot <-->|"Двосторонній зв'язок (Long Polling)"| Telegram
     
-    User(("👤 Користувач")) <-->|Браузер| NodeServer
-    User <-->|Telegram (Кнопки / Команди / Сповіщення)| Telegram
+    User <-->|"Браузер"| NodeServer
+    User <-->|"Telegram: Кнопки / Команди / Сповіщення"| Telegram
 ```
 
 ### 1. Апаратна частина (Контролер ESP32)

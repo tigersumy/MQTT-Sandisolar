@@ -10,29 +10,29 @@ This project provides a standalone integration for **SandiSolar / Aohai (6kW and
 
 ```mermaid
 graph TD
-    Inverter["SandiSolar Inverter"] <-->|RS-485 Modbus RTU| Adapter["XY-485 TTL-to-RS485"]
-    Adapter <-->|UART TX/RX| ESP32["ESP32 Controller (ESPHome)"]
+    Inverter["SandiSolar Inverter"] <-->|"RS-485 Modbus RTU"| Adapter["XY-485 TTL-to-RS485"]
+    Adapter <-->|"UART TX/RX"| ESP32["ESP32 Controller (ESPHome)"]
     
     subgraph MacServer["Mac Mini Server"]
-        MQTT["Aedes MQTT Broker (port 1883)"]
-        WebServer["Node.js Dashboard (port 3010)"]
+        MQTT["Aedes MQTT Broker (Port 1883)"]
+        WebServer["Node.js Dashboard (Port 3010)"]
         Monitor["Automation Daemon (mqtt_power_monitor.py)"]
         TeleBot["Interactive Bot (telegram_bot.py)"]
         
-        WebServer <-->|Telemetry Stream| MQTT
-        Monitor <-->|State Evaluation & Commands| MQTT
-        TeleBot <-->|Telemetry Cache| MQTT
+        WebServer <-->|"Telemetry Stream"| MQTT
+        Monitor <-->|"State & Inverter Commands"| MQTT
+        TeleBot <-->|"Telemetry Cache"| MQTT
     end
 
-    ESP32 <-->|Wi-Fi MQTT Pub/Sub| MQTT
-    ESP32 -->|HTTP Web UI (port 80)| User
+    ESP32 <-->|"Wi-Fi MQTT Pub/Sub"| MQTT
+    ESP32 -->|"HTTP Web UI: Port 80"| User["User"]
     
     TeleAPI["Telegram Cloud API"]
-    Monitor -->|Push Alerts (Outage / Grid Return / SOC Ladder)| TeleAPI
-    TeleBot <-->|Two-way Commands & Telemetry Cards| TeleAPI
+    Monitor -->|"Push Alerts: Outage / SOC"| TeleAPI
+    TeleBot <-->|"Two-way Commands & Telemetry"| TeleAPI
     
-    User(("👤 User")) <-->|Web Browser| WebServer
-    User <-->|Telegram App (Buttons & Status)| TeleAPI
+    User <-->|"Web Browser"| WebServer
+    User <-->|"Telegram App: Buttons & Commands"| TeleAPI
 ```
 
 ---

@@ -10,29 +10,29 @@
 
 ```mermaid
 graph TD
-    Inverter["Інвертор SandiSolar Aohai"] <-->|Modbus RTU RS-485| XY485["Адаптер XY-485"]
-    XY485 <-->|UART TX/RX| ESP32["Контролер ESP32"]
+    Inverter["Інвертор SandiSolar Aohai"] <-->|"Modbus RTU RS-485"| XY485["Адаптер XY-485"]
+    XY485 <-->|"UART TX/RX"| ESP32["Контролер ESP32"]
     
     subgraph MacMini["Сервер Mac Mini"]
-        Broker["MQTT Broker (порт 1883)"]
-        Server["Node.js Dashboard (порт 3010)"]
+        Broker["MQTT Broker (Порт 1883)"]
+        Server["Node.js Dashboard (Порт 3010)"]
         Monitor["MQTT Monitor Daemon (mqtt_power_monitor.py)"]
         TeleBot["Interactive Telegram Bot (telegram_bot.py)"]
         
-        Server <-->|MQTT Subscribe| Broker
-        Monitor <-->|MQTT Pub/Sub & Commands| Broker
-        TeleBot <-->|MQTT Subscribe| Broker
+        Server <-->|"MQTT Subscribe"| Broker
+        Monitor <-->|"MQTT Pub/Sub та команди"| Broker
+        TeleBot <-->|"MQTT Subscribe"| Broker
     end
 
-    ESP32 <-->|Wi-Fi / MQTT| Broker
-    ESP32 -->|HTTP Web UI| User
+    ESP32 <-->|"Wi-Fi / MQTT"| Broker
+    ESP32 -->|"HTTP Web UI: Порт 80"| User["Користувач"]
     
     Telegram["Telegram Cloud API"]
-    Monitor -->|Push сповіщення (аварії, SOC)| Telegram
-    TeleBot <-->|Двосторонні запити / картки| Telegram
+    Monitor -->|"Push сповіщення: аварії, SOC"| Telegram
+    TeleBot <-->|"Двосторонні запити та картки"| Telegram
     
-    User(("👤 Користувач")) <-->|Web Browser| Server
-    User <-->|Telegram App (Кнопки / Меню / Сповіщення)| Telegram
+    User <-->|"Web Browser"| Server
+    User <-->|"Telegram App: Кнопки / Меню / Сповіщення"| Telegram
 ```
 
 ### Характеристики вузлів:
