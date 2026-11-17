@@ -9,6 +9,9 @@ BACKUP_COUNT=3
 TARGET_FILES=(
     "$LOG_DIR/monitor_stdout.log"
     "$LOG_DIR/monitor_stderr.log"
+    "$LOG_DIR/telegram_bot.log"
+    "$LOG_DIR/telegram_bot_stdout.log"
+    "$LOG_DIR/telegram_bot_stderr.log"
     "$LOG_DIR/launchd_stdout.log"
     "$LOG_DIR/launchd_stderr.log"
     "/private/tmp/zigbee2mqtt.log"

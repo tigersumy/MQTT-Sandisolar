@@ -78,6 +78,10 @@ A lightweight Node.js server hosts the web dashboard on **port 3010** and runs a
 *   **Topic Mapping:**
     Subscriptions listen to the `sandisolar-controller/sensor/+/state` MQTT wildcard. The server maps the incoming ESPHome sensor topics back to virtual register slots to feed the real-time telemetry matrix.
 
+### 3. Automation Daemon & Interactive Telegram Bot
+*   **Automation Daemon (`mqtt_power_monitor.py`):** Monitors grid voltage and battery SOC, handles debounce, triggers inverter ON/OFF during outages, and sends immediate notifications.
+*   **Interactive Telegram Bot (`telegram_bot.py`):** Provides interactive two-way communication via Telegram buttons and commands (`/status`, `/battery`, `/grid`, `/solar`, `/load`, `/temps`, `/auto`) with strict Chat ID authorization.
+
 ---
 
 ## 🚀 Running the Project
@@ -91,13 +95,18 @@ esphome run sandisolar.yml
 esphome logs sandisolar.yml
 ```
 
-### Launching Node.js Server
-The server runs locally on the macOS host mini-PC.
+### Launching Services
 ```bash
-# Run manually
+# 1. Start Node.js MQTT Server & Dashboard
 node server.js
+
+# 2. Start Automation Monitor Daemon
+python3 mqtt_power_monitor.py
+
+# 3. Start Interactive Telegram Bot
+python3 telegram_bot.py
 ```
-*Note: A launchd agent plist is configured at `~/Library/LaunchAgents/com.antigravity.mqtt.plist` to run this server automatically on macOS startup.*
+*Note: launchd plists (`com.antigravity.mqtt.plist` and `com.sandisolar.telegram_bot.plist`) can be placed in `~/Library/LaunchAgents/` to run these services automatically on macOS startup.*
 
 ---
 

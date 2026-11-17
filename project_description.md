@@ -41,9 +41,11 @@ graph TD
 * **MQTT Брокер:** Вбудований Aedes (порт `1883`, логін `sandisolar_inv`, пароль `sandisolar_pass`).
 * **Веб-сервер:** Дашборд на порту `3010` (відображає сирі логи MQTT та надсилає тестові пакети Modbus).
 
-### 3. Автоматизація та правила (Python Daemon)
-* **Служба:** `com.user.mqtt_power_monitor` (запускає `mqtt_power_monitor.py`).
-* **Функція:** Зчитує телеметрію з MQTT, обробляє логіку перемикань, відправляє команди інвертору та надсилає сповіщення в Telegram.
+### 3. Автоматизація та Telegram бот (Python)
+* **Служба моніторингу:** `com.user.mqtt_power_monitor` (запускає `mqtt_power_monitor.py`).
+  * Зчитує телеметрію з MQTT, обробляє логіку перемикань при зникненні/появі світла, відправляє команди інвертору та надсилає аварійні сповіщення в Telegram.
+* **Інтерактивний бот:** `com.sandisolar.telegram_bot` (запускає `telegram_bot.py`).
+  * Забезпечує інтерактивний зв'язок: надає клавіатуру з кнопками та команди (`/status`, `/battery`, `/grid`, `/solar`, `/load`, `/temps`, `/auto`) для оперативного моніторингу параметрів інвертора з обмеженням доступу за Chat ID.
 
 ---
 
@@ -98,6 +100,7 @@ graph TD
 | :--- | :--- | :--- |
 | **`com.antigravity.mqtt`** | `com.antigravity.mqtt.plist` | Сервер Node.js (MQTT Брокер Aedes + Дашборд) |
 | **`com.user.mqtt_power_monitor`** | `com.user.mqtt_power_monitor.plist` | Python демон контролю інвертора |
+| **`com.sandisolar.telegram_bot`** | `com.sandisolar.telegram_bot.plist` | Інтерактивний Telegram бот моніторингу |
 | **`com.user.rotate_logs`** | `com.user.rotate_logs.plist` | Служба ротації логів (кожні 12 годин) |
 
 ---

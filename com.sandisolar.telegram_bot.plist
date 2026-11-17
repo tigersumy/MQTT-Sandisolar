@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.sandisolar.telegram_bot</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/path/to/MQTT-Sandisolar/venv/bin/python3</string>
+        <string>telegram_bot.py</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/path/to/MQTT-Sandisolar</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/path/to/MQTT-Sandisolar/logs/telegram_bot_stdout.log</string>
+    <key>StandardErrorPath</key>
+    <string>/path/to/MQTT-Sandisolar/logs/telegram_bot_stderr.log</string>
+</dict>
+</plist>
