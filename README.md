@@ -79,8 +79,51 @@ A lightweight Node.js server hosts the web dashboard on **port 3010** and runs a
     Subscriptions listen to the `sandisolar-controller/sensor/+/state` MQTT wildcard. The server maps the incoming ESPHome sensor topics back to virtual register slots to feed the real-time telemetry matrix.
 
 ### 3. Automation Daemon & Interactive Telegram Bot
-*   **Automation Daemon (`mqtt_power_monitor.py`):** Monitors grid voltage and battery SOC, handles debounce, triggers inverter ON/OFF during outages, and sends immediate notifications.
-*   **Interactive Telegram Bot (`telegram_bot.py`):** Provides interactive two-way communication via Telegram buttons and commands (`/status`, `/battery`, `/grid`, `/solar`, `/load`, `/temps`, `/auto`) with strict Chat ID authorization.
+*   **Automation Daemon (`mqtt_power_monitor.py`):** Monitors grid voltage and battery SOC, handles debounce, triggers inverter ON/OFF during outages, enforces battery charging ladders, and sends immediate push notifications.
+*   **Interactive Telegram Bot (`telegram_bot.py`):** Provides real-time two-way interaction via custom reply keyboard buttons and slash commands with whitelist-based Chat ID authorization.
+
+---
+
+## 🤖 Interactive Telegram Bot (`telegram_bot.py`)
+
+The project includes an interactive Telegram bot that connects to the local MQTT broker and allows you to check live telemetry, temperatures, electrical parameters, and automation states directly from your phone.
+
+### ✨ Key Features
+* **Zero Cloud Dependency:** Communicates directly with the local MQTT broker (`sandisolar-controller/sensor/#`) without third-party IoT clouds.
+* **Persistent Custom Keyboard:** Quickly navigate system parameters using 7 dedicated Ukrainian buttons without typing commands manually.
+* **Rich Telemetry Cards:**
+  * **📊 General Status (`/status`):** System overview showing inverter operating mode (`Off-grid`, `On-grid`, `Bypass`, `SoftOFF`), battery SOC & voltage, grid status, household load, solar generation, and thermal overview.
+  * **🔋 Battery (`/battery`):** Real-time battery SOC (%), voltage, current (A), dynamic charging/discharging power (W) with directional arrow indicators (⚡ Заряд / 🔻 Розряд), and BMS temperature.
+  * **⚡ Grid (`/grid`):** AC grid voltage, frequency (Hz), line current, active power (W), and apparent power (VA).
+  * **☀️ Solar / PV (`/solar`):** PV string voltage, current, real-time solar generation (W), and accumulated daily yield (kWh).
+  * **🏠 Household Load (`/load`):** Inverter output AC voltage, AC current, household active load power (W), and daily consumed energy (kWh).
+  * **🌡️ Thermal Diagnostics (`/temps`):** Live temperature readings for all 4 internal sensors:
+    * `T1`: Inverter heatsink temperature
+    * `T2`: Boost / IPM (DC-DC / IGBT stage)
+    * `T3`: LLC power transformer
+    * `T4`: Battery pack sensor (via BMS)
+    * Includes color-coded alert badges (🟢 normal $<65^\circ\text{C}$, 🟡 elevated $65-80^\circ\text{C}$, 🔴 high $>80^\circ\text{C}$).
+  * **⚙️ Automation Status (`/auto`):** Current power monitoring daemon status, debounce counter, and battery charging thresholds.
+  * **ℹ️ Help / Menu (`/help`, `/menu`):** Displays command reference and restores the interactive keyboard.
+* **Strict Security Whitelist:** Automatically filters incoming messages by `TELEGRAM_ALLOWED_CHAT_IDS` or `TELEGRAM_CHAT_ID`. Messages from unauthorized users are rejected and logged.
+
+### ⚙️ Environment Configuration (`.env`)
+```bash
+# Telegram Bot Token (obtained from @BotFather)
+TELEGRAM_BOT_TOKEN="your_bot_token_here"
+
+# Default notification chat ID
+TELEGRAM_CHAT_ID="your_telegram_chat_id"
+
+# Allowed Chat IDs for interactive bot (comma-separated for multiple users)
+TELEGRAM_ALLOWED_CHAT_IDS="123456789,987654321"
+
+# MQTT Broker Settings
+MQTT_BROKER="127.0.0.1"
+MQTT_PORT=1883
+MQTT_USER="sandisolar_inv"
+MQTT_PASS="sandisolar_pass"
+```
 
 ---
 
