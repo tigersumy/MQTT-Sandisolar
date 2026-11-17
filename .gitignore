@@ -3,6 +3,8 @@ node_modules/
 venv/
 venv_libs/
 .venv*/
+__pycache__/
+*.pyc
 
 # Logs and databases
 logs/
