@@ -170,7 +170,7 @@ def build_status_card():
 
     inv_switch = get_str("switch/power_switch", "UNKNOWN").upper()
     inv_running = (inv_switch == "ON")
-    mode_raw = get_str("sensor/inverter_mode_sensor", get_str("sensor/inverter_status", "Auto"))
+    mode_raw = get_str("sensor/inverter_mode", get_str("sensor/inverter_mode_sensor", get_str("sensor/inverter_status", "Auto")))
 
     # Battery emoji & direction
     if batt_a > 1.0:
@@ -217,7 +217,7 @@ def build_battery_card():
     batt_icon = "🔋" if soc >= 30 else "🪫"
 
     msg = (
-        f"{batt_icon} <b>Стан акумулятора (BMS FelicityESS)</b>\n"
+        f"{batt_icon} <b>Стан акумуляторної батареї (BMS)</b>\n"
         f"🕒 <i>{now_str}</i>\n\n"
         f"📊 <b>Заряд (SOC):</b> <b>{soc}%</b>\n"
         f"⚡ <b>Напруга:</b> {batt_v:.2f} В\n"
