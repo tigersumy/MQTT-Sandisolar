@@ -484,8 +484,10 @@ def mqtt_worker():
         logger.error("MQTT client module unavailable.")
         return
     import random
-    client_id = f"sandisolar_tg_bot_{random.randint(1000, 9999)}"
-    client = mqtt.Client(client_id=client_id, protocol=mqtt.MQTTv311)
+    try:
+        client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION1, client_id=client_id, protocol=mqtt.MQTTv311)
+    except AttributeError:
+        client = mqtt.Client(client_id=client_id, protocol=mqtt.MQTTv311)
     client.username_pw_set(MQTT_USER, MQTT_PASSWORD)
     client.on_connect = on_mqtt_connect
     client.on_message = on_mqtt_message
