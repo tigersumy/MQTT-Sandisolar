@@ -163,9 +163,9 @@ def build_status_card():
     pv_today = get_float("sensor/solar_generation_today", 0.0)
     load_w = get_float("sensor/power_out_load", 0.0)
 
-    t1 = get_float("sensor/inverter_temp", 0.0)
-    t2 = get_float("sensor/boost_temp", 0.0)
-    t3 = get_float("sensor/llc_temp", 0.0)
+    t1 = get_float("sensor/temp_inverter", get_float("sensor/inverter_temp", 0.0))
+    t2 = get_float("sensor/temp_boost", get_float("sensor/boost_temp", 0.0))
+    t3 = get_float("sensor/temp_llc", get_float("sensor/llc_temp", 0.0))
     t4 = get_float("sensor/bms_battery_temperature", 0.0)
 
     inv_switch = get_str("switch/power_switch", "UNKNOWN").upper()
@@ -277,7 +277,7 @@ def build_load_card():
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     load_w = get_float("sensor/power_out_load", 0.0)
     load_va = get_float("sensor/power_total_apparent_all", 0.0)
-    load_var = get_float("sensor/power_total_reactive_all", 0.0)
+    load_var = get_float("sensor/power_total_reactive__all", get_float("sensor/power_total_reactive_all", 0.0))
     pf = get_float("sensor/power_factor", 1.0)
     grid_v = get_float("sensor/grid_voltage", 0.0)
     inv_switch = get_str("switch/power_switch", "OFF").upper()
@@ -298,9 +298,9 @@ def build_load_card():
 
 def build_temps_card():
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    t1 = get_float("sensor/inverter_temp", 0.0)
-    t2 = get_float("sensor/boost_temp", 0.0)
-    t3 = get_float("sensor/llc_temp", 0.0)
+    t1 = get_float("sensor/temp_inverter", get_float("sensor/inverter_temp", 0.0))
+    t2 = get_float("sensor/temp_boost", get_float("sensor/boost_temp", 0.0))
+    t3 = get_float("sensor/temp_llc", get_float("sensor/llc_temp", 0.0))
     t4 = get_float("sensor/bms_battery_temperature", 0.0)
 
     def temp_badge(val):
