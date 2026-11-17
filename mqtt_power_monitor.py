@@ -75,6 +75,7 @@ debounce = {
     "consecutive_count": 0,
     "stable_status": "unknown",  # "СВІТЛО Є" or "СВІТЛА НЕМАЄ"
     "outage_alert_sent": False,  # Track if outage notification was sent
+    "restored_alert_sent": True, # Track if restored notification was sent (True initially to prevent alert on startup)
     "last_battery_alert_step": None  # Track battery low alerts (50, 40, 30, 20, 10)
 }
 
@@ -190,9 +191,11 @@ def evaluate_rules(client):
     if debounce["consecutive_count"] >= 2:
         debounce["stable_status"] = sample_text
 
-    # Reset outage alert flag when power is restored
+    # Reset alert flags on state change
     if debounce["stable_status"] == "СВІТЛО Є":
         debounce["outage_alert_sent"] = False
+    elif debounce["stable_status"] == "СВІТЛА НЕМАЄ":
+        debounce["restored_alert_sent"] = False
         
     logger.info(f"Grid Status: {sample_text} ({v_val:.1f}V) | Stable: {debounce['stable_status']} (count={debounce['consecutive_count']}) | Inverter: {'ON' if running_val else 'OFF'} | Battery: {soc_val}%")
     
@@ -288,6 +291,7 @@ def evaluate_rules(client):
                 try:
                     control_inverter(client, turn_on=True)
                     log_event("trigger_inverter_on_grid_charge", v_val, "СВІТЛО Є", "inverter_on_grid_charge")
+                    debounce["restored_alert_sent"] = True
                     
                     msg = (
                         f"🔋 <b>ІНВЕРТОР УВІМКНЕНО (ЗАРЯДКА ВІД МЕРЕЖІ)</b>\n\n"
@@ -314,6 +318,18 @@ def evaluate_rules(client):
             else:
                 logger.info("ℹ️ Power is available, inverter is off, and battery is charged. Skip.")
                 log_event("trigger_inverter_off_skipped", v_val, "СВІТЛО Є", "skip_already_off")
+                if not debounce.get("restored_alert_sent", False):
+                    debounce["restored_alert_sent"] = True
+                    msg = (
+                        f"🟢 <b>СВІТЛО З'ЯВИЛОСЯ (МЕРЕЖА ВІДНОВЛЕНА)</b>\n\n"
+                        f"Причина: 2× «СВІТЛО Є» (напруга мережі повернулася)\n"
+                        f"Датчик: Power\n"
+                        f"Статус: СВІТЛО Є ({v_val:.1f}V)\n"
+                        f"Інвертор: Вимкнено (режим очікування/байпас)\n"
+                        f"Батарея: {soc_val}%\n"
+                        f"Час: {current_time_str}"
+                    )
+                    send_telegram(msg)
         else:
             # Inverter is running (ON) -> check if we can turn it OFF (battery threshold check)
             if soc_val >= BATTERY_SOC_THRESHOLD:
@@ -321,12 +337,13 @@ def evaluate_rules(client):
                 try:
                     control_inverter(client, turn_on=False)
                     log_event("trigger_inverter_off", v_val, "СВІТЛО Є", "inverter_off")
+                    debounce["restored_alert_sent"] = True
                     
                     msg = (
                         f"🔌 <b>ІНВЕРТОР ВИМКНЕНО</b>\n\n"
                         f"Причина: 2× «СВІТЛО Є» + Running + SOC≥{BATTERY_SOC_THRESHOLD}%\n"
                         f"Датчик: Power\n"
-                        f"Статус: СВІТЛО Є\n"
+                        f"Статус: СВІТЛО Є ({v_val:.1f}V)\n"
                         f"Інвертор був: running\n"
                         f"Батарея: {soc_val}%\n"
                         f"Час: {current_time_str}"
@@ -345,12 +362,21 @@ def evaluate_rules(client):
                     )
                     send_telegram(msg)
             else:
-                # Blocked from turning off
-                                logger.info(f"🛑 Inverter OFF blocked: Battery SOC ({soc_val}%) < {BATTERY_SOC_THRESHOLD}%")
-                
-                                # Check if we should log/alert block event
-                                log_event("trigger_inverter_off_blocked", v_val, "СВІТЛО Є", "block_off_low_soc")
-                                # NO TELEGRAM for blocked - not a state change, just a status
+                # Blocked from turning off (charging battery)
+                logger.info(f"🛑 Inverter OFF blocked: Battery SOC ({soc_val}%) < {BATTERY_SOC_THRESHOLD}%")
+                log_event("trigger_inverter_off_blocked", v_val, "СВІТЛО Є", "block_off_low_soc")
+                if not debounce.get("restored_alert_sent", False):
+                    debounce["restored_alert_sent"] = True
+                    msg = (
+                        f"🟢 <b>СВІТЛО З'ЯВИЛОСЯ (МЕРЕЖА ВІДНОВЛЕНА)</b>\n\n"
+                        f"Причина: 2× «СВІТЛО Є» (напруга мережі повернулася)\n"
+                        f"Датчик: Power\n"
+                        f"Статус: СВІТЛО Є ({v_val:.1f}V)\n"
+                        f"Інвертор: Залишається УВІМКНЕНИМ (триває зарядка АКБ)\n"
+                        f"Батарея: {soc_val}% (автовимкнення при досягненні ≥ {BATTERY_SOC_THRESHOLD}%)\n"
+                        f"Час: {current_time_str}"
+                    )
+                    send_telegram(msg)
     else:
         # Regular polling update log
         log_event("status_update", v_val, sample_text)
