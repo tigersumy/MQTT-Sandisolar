@@ -40,6 +40,7 @@ MQTT_PASSWORD = os.getenv("MQTT_PASSWORD", "sandisolar_pass")
 # MQTT Topics (ESPHome standard format)
 TOPIC_GRID_VOLTAGE = os.getenv("TOPIC_GRID_VOLTAGE", "sandisolar-controller/sensor/grid_voltage/state")
 TOPIC_BATTERY_SOC = os.getenv("TOPIC_BATTERY_SOC", "sandisolar-controller/sensor/battery_soc/state")
+TOPIC_BATTERY_TEMP = os.getenv("TOPIC_BATTERY_TEMP", "sandisolar-controller/sensor/bms_battery_temperature/state")
 TOPIC_SWITCH_STATE = os.getenv("TOPIC_SWITCH_STATE", "sandisolar-controller/switch/power_switch/state")
 TOPIC_SWITCH_CMD = os.getenv("TOPIC_SWITCH_CMD", "sandisolar-controller/switch/power_switch/command")
 
@@ -47,6 +48,7 @@ TOPIC_SWITCH_CMD = os.getenv("TOPIC_SWITCH_CMD", "sandisolar-controller/switch/p
 GRID_VOLTAGE_THRESHOLD = float(os.getenv("GRID_VOLTAGE_THRESHOLD", "100.0"))  # Volts. >= 100 is GRID ON (СВІТЛО Є), < 100 is GRID OFF (СВІТЛА НЕМАЄ)
 BATTERY_SOC_THRESHOLD = int(os.getenv("BATTERY_SOC_THRESHOLD", "95"))         # Turn OFF target SOC (if < 95, keep ON to charge from grid)
 GRID_CHARGE_SOC_THRESHOLD = int(os.getenv("GRID_CHARGE_SOC_THRESHOLD", "75")) # Start grid charging if inverter is OFF and SOC falls below this
+BATTERY_COLD_THRESHOLD = float(os.getenv("BATTERY_COLD_THRESHOLD", "3.0"))    # °C. Below this, block automatic grid charge to protect LiFePO4 chemistry
 
 # Path Setup
 LOG_DIR = os.getenv("LOG_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "logs"))
@@ -65,6 +67,8 @@ latest_data = {
     "grid_voltage_ts": 0,
     "battery_soc": None,
     "battery_soc_ts": 0,
+    "battery_temp": None,
+    "battery_temp_ts": 0,
     "inverter_running": None,  # True/False (ON/OFF), mapped from power_switch
     "inverter_running_ts": 0,
 }
@@ -76,7 +80,8 @@ debounce = {
     "stable_status": "unknown",  # "СВІТЛО Є" or "СВІТЛА НЕМАЄ"
     "outage_alert_sent": False,  # Track if outage notification was sent
     "restored_alert_sent": True, # Track if restored notification was sent (True initially to prevent alert on startup)
-    "last_battery_alert_step": None  # Track battery low alerts (50, 40, 30, 20, 10)
+    "last_battery_alert_step": None,  # Track battery low alerts (50, 40, 30, 20, 10)
+    "cold_battery_alert_sent": False  # Track cold battery alert
 }
 
 # Logger Configuration
@@ -130,6 +135,7 @@ def log_event(event_type, raw_val, status_text, action_taken=None, error_msg=Non
         "status_text": status_text,
         "inverter_status": "running" if latest_data["inverter_running"] else "off",
         "battery_soc": latest_data["battery_soc"],
+        "battery_temp": latest_data["battery_temp"],
         "action_taken": action_taken
     }
     if error_msg:
@@ -162,6 +168,7 @@ def evaluate_rules(client):
         v_ts = latest_data["grid_voltage_ts"]
         soc_val = latest_data["battery_soc"]
         soc_ts = latest_data["battery_soc_ts"]
+        temp_val = latest_data["battery_temp"]
         running_val = latest_data["inverter_running"]
         running_ts = latest_data["inverter_running_ts"]
         
@@ -197,7 +204,8 @@ def evaluate_rules(client):
     elif debounce["stable_status"] == "СВІТЛА НЕМАЄ":
         debounce["restored_alert_sent"] = False
         
-    logger.info(f"Grid Status: {sample_text} ({v_val:.1f}V) | Stable: {debounce['stable_status']} (count={debounce['consecutive_count']}) | Inverter: {'ON' if running_val else 'OFF'} | Battery: {soc_val}%")
+    temp_str = f" | Temp: {temp_val:.1f}°C" if temp_val is not None else ""
+    logger.info(f"Grid Status: {sample_text} ({v_val:.1f}V) | Stable: {debounce['stable_status']} (count={debounce['consecutive_count']}) | Inverter: {'ON' if running_val else 'OFF'} | Battery: {soc_val}%{temp_str}")
     
     # 3. Low Battery Step Alert Logic (<= 50%, 40%, 30%, 20%, 10%)
     LOW_BATTERY_STEPS = [50, 40, 30, 20, 10]
@@ -287,35 +295,61 @@ def evaluate_rules(client):
         if not running_val:
             # Already OFF -> check if we need to turn ON for Grid Charging
             if soc_val < GRID_CHARGE_SOC_THRESHOLD:
-                logger.warning(f"🔋 Power is available but Battery SOC ({soc_val}%) < {GRID_CHARGE_SOC_THRESHOLD}% -> Sending ON command for Grid Charge.")
-                try:
-                    control_inverter(client, turn_on=True)
-                    log_event("trigger_inverter_on_grid_charge", v_val, "СВІТЛО Є", "inverter_on_grid_charge")
-                    debounce["restored_alert_sent"] = True
-                    
-                    msg = (
-                        f"🔋 <b>ІНВЕРТОР УВІМКНЕНО (ЗАРЯДКА ВІД МЕРЕЖІ)</b>\n\n"
-                        f"Причина: Інвертор ВИМКНЕНИЙ + «СВІТЛО Є» + Батарея {soc_val}% &lt; {GRID_CHARGE_SOC_THRESHOLD}%\n"
-                        f"Датчик: Power\n"
-                        f"Статус: СВІТЛО Є\n"
-                        f"Інвертор був: off\n"
-                        f"Батарея: {soc_val}%\n"
-                        f"Час: {current_time_str}"
+                # Winter Cold Battery Protection Check (< BATTERY_COLD_THRESHOLD °C)
+                if temp_val is not None and temp_val < BATTERY_COLD_THRESHOLD:
+                    logger.warning(
+                        f"❄️ Cold Battery Protection Active! Temperature ({temp_val:.1f}°C) < {BATTERY_COLD_THRESHOLD}°C. "
+                        f"Automatic grid charging blocked to prevent LiFePO4 damage."
                     )
-                    send_telegram(msg)
-                except Exception as e:
-                    err_msg = str(e)
-                    logger.error(f"❌ Failed to turn ON inverter for grid charging: {err_msg}")
-                    log_event("trigger_inverter_on_grid_charge_failed", v_val, "СВІТЛО Є", "inverter_on_grid_charge", error_msg=err_msg)
-                    
-                    msg = (
-                        f"❌ <b>ПОМИЛКА УВІМКНЕННЯ ІНВЕРТОРА (ЗАРЯДКА)</b>\n\n"
-                        f"Причина: Інвертор OFF + «СВІТЛО Є» + Батарея {soc_val}% &lt; {GRID_CHARGE_SOC_THRESHOLD}%\n"
-                        f"Помилка: {err_msg}\n"
-                        f"Час: {current_time_str}"
-                    )
-                    send_telegram(msg)
+                    log_event("trigger_inverter_on_grid_charge_blocked_cold", v_val, "СВІТЛО Є", "block_cold_temp", error_msg=f"Battery Temp {temp_val:.1f}C < {BATTERY_COLD_THRESHOLD}C")
+                    if not debounce.get("cold_battery_alert_sent", False):
+                        debounce["cold_battery_alert_sent"] = True
+                        msg = (
+                            f"❄️ <b>ХОЛОДНИЙ ЗАХИСТ АКБ: ЗАРЯДКУ ВІД МЕРЕЖІ ЗАБЛОКОВАНО</b>\n\n"
+                            f"🌡️ Температура АКБ: <b>{temp_val:.1f} °C</b> (поріг безпеки: &lt; {BATTERY_COLD_THRESHOLD:.1f} °C)\n"
+                            f"🔋 Рівень заряду: <b>{soc_val}%</b> (&lt; {GRID_CHARGE_SOC_THRESHOLD}%)\n"
+                            f"⚡ Мережа: СВІТЛО Є ({v_val:.1f}V)\n"
+                            f"🛡️ <i>Захист LiFePO4: заряджання літієвих осередків при температурі нижче +3 °C викликає незворотну деградацію (металізацію літію).</i>\n"
+                            f"🕒 Автозарядка відновиться після прогріву батареї до ≥ {BATTERY_COLD_THRESHOLD + 1.0:.1f} °C.\n"
+                            f"Час: {current_time_str}"
+                        )
+                        send_telegram(msg)
+                else:
+                    if temp_val is not None and temp_val >= BATTERY_COLD_THRESHOLD + 1.0:
+                        debounce["cold_battery_alert_sent"] = False
+
+                    logger.warning(f"🔋 Power is available but Battery SOC ({soc_val}%) < {GRID_CHARGE_SOC_THRESHOLD}% -> Sending ON command for Grid Charge.")
+                    try:
+                        control_inverter(client, turn_on=True)
+                        log_event("trigger_inverter_on_grid_charge", v_val, "СВІТЛО Є", "inverter_on_grid_charge")
+                        debounce["restored_alert_sent"] = True
+                        
+                        temp_info = f"\n🌡️ Температура АКБ: {temp_val:.1f} °C" if temp_val is not None else ""
+                        msg = (
+                            f"🔋 <b>ІНВЕРТОР УВІМКНЕНО (ЗАРЯДКА ВІД МЕРЕЖІ)</b>\n\n"
+                            f"Причина: Інвертор ВИМКНЕНИЙ + «СВІТЛО Є» + Батарея {soc_val}% &lt; {GRID_CHARGE_SOC_THRESHOLD}%\n"
+                            f"Датчик: Power\n"
+                            f"Статус: СВІТЛО Є\n"
+                            f"Інвертор був: off\n"
+                            f"Батарея: {soc_val}%{temp_info}\n"
+                            f"Час: {current_time_str}"
+                        )
+                        send_telegram(msg)
+                    except Exception as e:
+                        err_msg = str(e)
+                        logger.error(f"❌ Failed to turn ON inverter for grid charging: {err_msg}")
+                        log_event("trigger_inverter_on_grid_charge_failed", v_val, "СВІТЛО Є", "inverter_on_grid_charge", error_msg=err_msg)
+                        
+                        msg = (
+                            f"❌ <b>ПОМИЛКА УВІМКНЕННЯ ІНВЕРТОРА (ЗАРЯДКА)</b>\n\n"
+                            f"Причина: Інвертор OFF + «СВІТЛО Є» + Батарея {soc_val}% &lt; {GRID_CHARGE_SOC_THRESHOLD}%\n"
+                            f"Помилка: {err_msg}\n"
+                            f"Час: {current_time_str}"
+                        )
+                        send_telegram(msg)
             else:
+                if temp_val is not None and temp_val >= BATTERY_COLD_THRESHOLD + 1.0:
+                    debounce["cold_battery_alert_sent"] = False
                 logger.info("ℹ️ Power is available, inverter is off, and battery is charged. Skip.")
                 log_event("trigger_inverter_off_skipped", v_val, "СВІТЛО Є", "skip_already_off")
                 if not debounce.get("restored_alert_sent", False):
@@ -388,7 +422,9 @@ def on_connect(client, userdata, flags, rc, *args, **kwargs):
         client.subscribe([
             (TOPIC_GRID_VOLTAGE, 1),
             (TOPIC_BATTERY_SOC, 1),
-            (TOPIC_SWITCH_STATE, 1)
+            (TOPIC_SWITCH_STATE, 1),
+            (TOPIC_BATTERY_TEMP, 1),
+            ("sandisolar-controller/sensor/+/state", 1)
         ])
     else:
         logger.error(f"Failed to connect to broker, return code: {rc}")
@@ -400,15 +436,18 @@ def on_message(client, userdata, msg):
         now = time.time()
         
         with state_lock:
-            if topic == TOPIC_GRID_VOLTAGE:
+            if topic == TOPIC_GRID_VOLTAGE or topic.endswith("grid_voltage/state"):
                 latest_data["grid_voltage"] = float(payload)
                 latest_data["grid_voltage_ts"] = now
-            elif topic == TOPIC_BATTERY_SOC:
+            elif topic == TOPIC_BATTERY_SOC or topic.endswith("battery_soc/state"):
                 latest_data["battery_soc"] = int(float(payload))
                 latest_data["battery_soc_ts"] = now
-            elif topic == TOPIC_SWITCH_STATE:
+            elif topic == TOPIC_SWITCH_STATE or topic.endswith("power_switch/state"):
                 latest_data["inverter_running"] = (payload.upper() == "ON")
                 latest_data["inverter_running_ts"] = now
+            elif topic == TOPIC_BATTERY_TEMP or topic.endswith("bms_battery_temperature/state") or topic.endswith("battery_temperature/state"):
+                latest_data["battery_temp"] = float(payload)
+                latest_data["battery_temp_ts"] = now
     except Exception as e:
         logger.error(f"Error processing MQTT message on {topic}: {e}")
 

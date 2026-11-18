@@ -183,7 +183,14 @@ def build_status_card():
     batt_icon = "🔋" if soc >= 30 else "🪫"
     grid_icon = "🟢 СВІТЛО Є" if has_grid else "🔴 СВІТЛА НЕМАЄ"
 
+    fault_banner = ""
+    if mode_raw.lower() == "fault":
+        fault_banner = "🚨 <b>УВАГА: Інвертор у стані FAULT / АВАРІЯ!</b>\n\n"
+
+    t4_badge = f"❄️ T4: {t4:.1f}°C (Холод!)" if t4 < 3.0 else f"T4: {t4:.1f}°C"
+
     msg = (
+        f"{fault_banner}"
         f"📊 <b>Загальний статус SandiSolar</b>\n"
         f"🕒 <i>{now_str}</i>\n\n"
         f"⚡ <b>Мережа:</b> {grid_icon} ({grid_v:.1f} В, {grid_hz:.2f} Гц)\n"
@@ -191,7 +198,7 @@ def build_status_card():
         f"{batt_icon} <b>АКБ:</b> <b>{soc}%</b> ({batt_v:.1f} В, {batt_dir})\n"
         f"🏠 <b>Споживання будинку:</b> {load_w:.0f} Вт\n"
         f"☀️ <b>Сонячні панелі:</b> {pv_w:.0f} Вт (сьогодні: {pv_today:.2f} кВт·год)\n"
-        f"🌡 <b>Температури:</b> T1: {t1:.1f}° | T2: {t2:.1f}° | T3: {t3:.1f}° | T4: {t4:.1f}°C"
+        f"🌡 <b>Температури:</b> T1: {t1:.1f}° | T2: {t2:.1f}° | T3: {t3:.1f}° | {t4_badge}"
     )
     return msg
 
@@ -216,6 +223,16 @@ def build_battery_card():
 
     batt_icon = "🔋" if soc >= 30 else "🪫"
 
+    temp_status = ""
+    if t4 < 3.0:
+        temp_status = "\n❄️ <b>Холодний захист:</b> Активний (< 3.0 °C — заряд від мережі блокується для захисту LiFePO4)\n"
+    elif t4 < 10.0:
+        temp_status = "\n🌡️ <b>Температурний стан:</b> Прохолодно (3–10 °C, рекомендовано ощадливий струм)\n"
+
+    bms_comm_note = ""
+    if max_charge == 0.0 and max_discharge == 0.0 and soc > 0:
+        bms_comm_note = "\n⚠️ <b>Увага:</b> Ліміти BMS дорівнюють 0 А (можливе блокування або збій CAN зв'язку)\n"
+
     msg = (
         f"{batt_icon} <b>Стан акумуляторної батареї (BMS)</b>\n"
         f"🕒 <i>{now_str}</i>\n\n"
@@ -224,7 +241,9 @@ def build_battery_card():
         f"🔄 <b>Режим струму:</b> {dir_text}\n"
         f"🔋 <b>BMS Струм:</b> {bms_a:.2f} А\n"
         f"🩺 <b>Стан здоров'я (SOH):</b> {soh}%\n"
-        f"🌡 <b>Температура АКБ (T4 BMS):</b> {t4:.1f} °C\n\n"
+        f"🌡 <b>Температура АКБ (T4 BMS):</b> {t4:.1f} °C\n"
+        f"{temp_status}"
+        f"{bms_comm_note}\n"
         f"🛡 <b>Дозволені ліміти BMS:</b>\n"
         f"  • Макс. заряд: {max_charge:.1f} А\n"
         f"  • Макс. розряд: {max_discharge:.1f} А"
@@ -303,14 +322,29 @@ def build_temps_card():
     t3 = get_float("sensor/temp_llc", get_float("sensor/llc_temp", 0.0))
     t4 = get_float("sensor/bms_battery_temperature", 0.0)
 
-    def temp_badge(val):
+    def temp_badge(val, is_battery=False):
         if val <= 0.1:
             return "⚪"
-        if val < 55.0:
-            return "🟢"
-        if val < 70.0:
-            return "🟡"
-        return "🔴"
+        if is_battery:
+            if val < 3.0:
+                return "❄️"
+            if val < 10.0:
+                return "🔵"
+            if val < 45.0:
+                return "🟢"
+            if val < 55.0:
+                return "🟡"
+            return "🔴"
+        else:
+            if val < 55.0:
+                return "🟢"
+            if val < 70.0:
+                return "🟡"
+            return "🔴"
+
+    cold_warn = ""
+    if t4 < 3.0 and t4 > 0.0:
+        cold_warn = "\n❄️ <b>УВАГА:</b> Температура АКБ нижче +3 °C! Автоматика блокує заряд для захисту осередків LiFePO4 від деградації.\n"
 
     msg = (
         f"🌡 <b>Температурна діагностика системи (T1–T4)</b>\n"
@@ -318,8 +352,9 @@ def build_temps_card():
         f"{temp_badge(t1)} <b>T1 — Радіатор інвертора:</b> {t1:.1f} °C\n"
         f"{temp_badge(t2)} <b>T2 — Boost / IPM (DC-DC / IGBT):</b> {t2:.1f} °C\n"
         f"{temp_badge(t3)} <b>T3 — LLC силовий трансформатор:</b> {t3:.1f} °C\n"
-        f"{temp_badge(t4)} <b>T4 — Акумулятор (BMS сенсор):</b> {t4:.1f} °C\n\n"
-        f"ℹ️ <i>Нормальний робочий діапазон: до 60–65 °C. Захист від перегріву спрацьовує при >85 °C.</i>"
+        f"{temp_badge(t4, is_battery=True)} <b>T4 — Акумулятор (BMS сенсор):</b> {t4:.1f} °C\n"
+        f"{cold_warn}\n"
+        f"ℹ️ <i>Нормальний діапазон інвертора: до 60–65 °C (захист >85 °C). Безпечний заряд LiFePO4: від +3 °C до +45 °C.</i>"
     )
     return msg
 
@@ -327,6 +362,7 @@ def build_auto_card():
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     grid_v = get_float("sensor/grid_voltage", 0.0)
     soc = get_int("sensor/battery_soc", 0)
+    t4 = get_float("sensor/bms_battery_temperature", 0.0)
     has_grid = grid_v >= 100.0
 
     # Read latest event from log file if present
@@ -345,15 +381,19 @@ def build_auto_card():
         except Exception:
             pass
 
+    cold_state = "❄️ АКТИВНИЙ (заряд заблоковано)" if (t4 < 3.0 and t4 > 0.0) else "🟢 Норма (заряд дозволено)"
+
     msg = (
         f"⚙️ <b>Параметри та статус автоматики захисту</b>\n"
         f"🕒 <i>{now_str}</i>\n\n"
         f"🤖 <b>Демон моніторингу:</b> Активний (mqtt_power_monitor)\n"
         f"⚡ <b>Мережевий статус:</b> {'СВІТЛО Є' if has_grid else 'СВІТЛА НЕМАЄ'} ({grid_v:.1f} В)\n"
-        f"🔋 <b>Поточний заряд АКБ:</b> {soc}%\n\n"
+        f"🔋 <b>Поточний заряд АКБ:</b> {soc}%\n"
+        f"🌡️ <b>Температура АКБ:</b> {t4:.1f} °C\n\n"
         f"📋 <b>Встановлені пороги:</b>\n"
         f"  • Вимкнення інвертора при поверненні світла: <b>SOC ≥ {BATTERY_SOC_THRESHOLD}%</b>\n"
         f"  • Примусовий заряд при наявності світла: <b>SOC &lt; {GRID_CHARGE_SOC_THRESHOLD}%</b>\n"
+        f"  • Зимовий захист АКБ від холоду: <b>&lt; 3.0 °C</b> ({cold_state})\n"
         f"  • Поріг розпізнавання аварії мережі: <b>&lt; 100.0 В</b> (2 цикли дебаунсу)\n\n"
         f"📝 <b>Остання зафіксована подія:</b>\n<code>{last_event_text}</code>"
     )

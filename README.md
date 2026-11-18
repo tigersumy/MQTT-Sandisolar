@@ -54,9 +54,31 @@ graph TD
 
 #### XY-485 to Inverter (RJ45 Port)
 Refer to the inverter's Modbus port diagram. A standard CAT5e wire is terminated to connect the adapter pins:
-*   **XY-485 A+** ➡️ **Inverter RS485-A**
-*   **XY-485 B-** ➡️ **Inverter RS485-B**
+*   **XY-485 A+** ➡️ **Inverter RS485-A** (RJ45 Pin 2 or Pin 7)
+*   **XY-485 B-** ➡️ **Inverter RS485-B** (RJ45 Pin 1 or Pin 8)
+*   **XY-485 GND** ➡️ **Inverter GND** (RJ45 Pin 3 or Pin 6)
 *   *Note: Ensure grounds are shared if communication is unstable.*
+
+### 3. SandiSolar SD-PRO-EU 6.5K BMS RJ45 Port Architecture & PCB Topology
+
+The combined `BMS (RJ45)` port on the SandiSolar SD-PRO-EU 6.5K inverter houses both RS-485 and CAN communication buses on a single modular socket:
+
+| RJ45 Pin | Inverter Signal | Physical PCB Connection | Function |
+| :---: | :--- | :--- | :--- |
+| **Pin 1** | **BMS-485_B** | Connected via copper PCB trace to **Pin 8** | RS-485 inverting line B (-) |
+| **Pin 2** | **BMS-485_A** | Connected via copper PCB trace to **Pin 7** | RS-485 non-inverting line A (+) |
+| **Pin 3** | **BMS-GND** | Connected via copper PCB trace to **Pin 6** | Signal ground (GND) |
+| **Pin 4** | **CAN-H** | Direct CAN transceiver differential input | High-speed CAN Bus High |
+| **Pin 5** | **CAN-L** | Direct CAN transceiver differential input | High-speed CAN Bus Low |
+| **Pin 6** | **BMS-GND** | Connected to Pin 3 | Redundant Signal ground (GND) |
+| **Pin 7** | **BMS-485_A** | Connected to Pin 2 | Parallel RS-485 line A (+) |
+| **Pin 8** | **BMS-485_B** | Connected to Pin 1 | Parallel RS-485 line B (-) |
+
+> ⚠️ **CRITICAL WIRING WARNING — DO NOT USE STRAIGHT 1-TO-1 PATCH CORDS:**
+> * On the inverter PCB, **Pin 1 is bridged to Pin 8**, and **Pin 2 is bridged to Pin 7**.
+> * Many external BMS devices (e.g. standard Pylontech cables or third-party gateways) place CAN-H on Pin 8 and GND on Pin 1.
+> * If a standard straight 1-to-1 patch cord is plugged in, **CAN-H (Pin 8) is shorted directly to GND (Pin 1) across the inverter PCB trace**, completely muting the CAN bus and causing immediate **`F20 / Fault 307 BMS Comm Fault`**!
+> * **Correct CAN cable wiring:** Wire only **Pin 4 (CAN-H)**, **Pin 5 (CAN-L)**, and **Pin 3 (GND)** to the inverter side. Leave pins 1, 2, 7, and 8 disconnected on the CAN cable.
 
 ---
 
@@ -93,8 +115,8 @@ A lightweight Node.js server hosts the web dashboard on **port 3010** and runs a
     Subscriptions listen to the `sandisolar-controller/sensor/+/state` MQTT wildcard. The server maps the incoming ESPHome sensor topics back to virtual register slots to feed the real-time telemetry matrix.
 
 ### 3. Automation Daemon & Interactive Telegram Bot
-*   **Automation Daemon (`mqtt_power_monitor.py`):** Monitors grid voltage and battery SOC, handles debounce, triggers inverter ON/OFF during outages, enforces battery charging ladders, and sends immediate push notifications.
-*   **Interactive Telegram Bot (`telegram_bot.py`):** Provides real-time two-way interaction via custom reply keyboard buttons and slash commands with whitelist-based Chat ID authorization.
+*   **Automation Daemon (`mqtt_power_monitor.py`):** Monitors grid voltage and battery SOC, handles debounce, triggers inverter ON/OFF during outages, enforces battery charging ladders, provides **Winter Cold Battery Protection** (inhibits grid charging if battery temperature $< 3.0^\circ\text{C}$ to protect LiFePO4 chemistry from lithium plating), and sends immediate push notifications.
+*   **Interactive Telegram Bot (`telegram_bot.py`):** Provides real-time two-way interaction via custom reply keyboard buttons and slash commands with whitelist-based Chat ID authorization. Includes inverter Fault alert banners, cold battery status badges, and 4-zone thermal diagnostics.
 
 ---
 
