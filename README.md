@@ -80,6 +80,29 @@ The combined `BMS (RJ45)` port on the SandiSolar SD-PRO-EU 6.5K inverter houses 
 > * If a standard straight 1-to-1 patch cord is plugged in, **CAN-H (Pin 8) is shorted directly to GND (Pin 1) across the inverter PCB trace**, completely muting the CAN bus and causing immediate **`F20 / Fault 307 BMS Comm Fault`**!
 > * **Correct CAN cable wiring:** Wire only **Pin 4 (CAN-H)**, **Pin 5 (CAN-L)**, and **Pin 3 (GND)** to the inverter side. Leave pins 1, 2, 7, and 8 disconnected on the CAN cable.
 
+### 4. Inverter Operating Modes Matrix & RS485 Zero-Export Architecture
+
+The `SandiSolar SD-PRO-EU 6.5K` / `Aohai AO-6KSL-G3` platform implements an advanced power routing engine configurable through Modbus registers:
+
+* **Output Power Priority (Register 182):**
+  * `SOL (0)`: Solar First — Solar supplies loads first. Deficit covered by battery. Utility connected only upon reaching battery discharge threshold.
+  * `UTI (1)`: Utility First — Grid powers loads as primary source (pure bypass). Solar and battery kick in only during blackouts.
+  * `SBU (2)`: Solar-Battery-Utility — Solar powers loads ➡️ Battery powers loads ➡️ Grid connects when battery is depleted. Maximizes autonomy.
+* **Battery Charging Priority (Register 181):**
+  * `CSO (0)`: Solar First — Solar charges battery first; grid charges only when solar is unavailable.
+  * `SNU (1)`: Solar & Utility — Solar and grid charge simultaneously (fastest charge ladder).
+  * `OSO (2)`: Only Solar — Grid charging strictly disabled under all conditions.
+* **AC Input Sensitivity (Register 183):**
+  * `APL`: Appliance Mode ($90–280\text{V}$) — Broad input range preventing nuisance drops in unstable rural grids.
+  * `UPS`: Uninterruptible Mode ($170–280\text{V}$) — Tight voltage window with ultrafast transfer ($< 10\text{ms}$) for sensitive IT servers and workstations.
+* **GEN Multi-Function Auxiliary Port (Register 104 `genMode`):**
+  * `Mode 1 (Generator Input)`: Backup fuel generator input with automatic dry-contact auto-start signal.
+  * `Mode 2 (Microinverter AC-Coupling)`: Bi-directional port to connect grid-tie microinverters to expand solar generation on the AC side.
+  * `Mode 3 (Smart Load Output)`: Dynamic dump load port (water heater, boiler) enabled only when solar surplus exists and battery SOC is above the threshold.
+* **RS-485 Smart Meter Zero Export (Why CT Clamp is Inactive):**
+  * The inverter motherboard has **no physical Current Transformer (CT) clamp terminals**.
+  * Zero-export and anti-backflow functionality is exclusively handled via an **RS-485 Smart Meter** (`ctMode=0`) connected to RJ45 pins **7 (A+)** and **8 (B-)**. Enabling CT in mobile apps is disabled on this hardware family.
+
 ---
 
 ## 🛠️ Software & Firmware Setup
@@ -127,9 +150,13 @@ The project includes an interactive Telegram bot that connects to the local MQTT
 ### ✨ Key Features
 * **Zero Cloud Dependency:** Communicates directly with the local MQTT broker (`sandisolar-controller/sensor/#`) without third-party IoT clouds.
 * **Persistent Custom Keyboard:** Quickly navigate system parameters using 7 dedicated Ukrainian buttons without typing commands manually.
+* **⏱️ Battery Predictive Analytics & Autonomy ETA:**
+  * Real-time calculation of remaining charge time to **100%** with charge velocity in `%/hr`.
+  * Real-time calculation of autonomy countdown down to safe **20% cutoff** during grid outages or high consumption.
+  * Automatic buffer detection (idle mode when current is $< 1.0\text{ A}$).
 * **Rich Telemetry Cards:**
-  * **📊 General Status (`/status`):** System overview showing inverter operating mode (`Off-grid`, `On-grid`, `Bypass`, `SoftOFF`), battery SOC & voltage, grid status, household load, solar generation, and thermal overview.
-  * **🔋 Battery (`/battery`):** Real-time battery SOC (%), voltage, current (A), dynamic charging/discharging power (W) with directional arrow indicators (⚡ Заряд / 🔻 Розряд), and BMS temperature.
+  * **📊 General Status (`/status`):** System overview showing inverter operating mode (`Off-grid`, `On-grid`, `Bypass`, `SoftOFF`), battery SOC & voltage, inline ETA prediction, grid status, household load, solar generation, and thermal overview.
+  * **🔋 Battery (`/battery`):** Real-time battery SOC (%), voltage, current (A), dynamic charging/discharging power (W) with directional arrow indicators (⚡ Заряд / 🔻 Розряд), dedicated ETA forecast section, and BMS temperature.
   * **⚡ Grid (`/grid`):** AC grid voltage, frequency (Hz), line current, active power (W), and apparent power (VA).
   * **☀️ Solar / PV (`/solar`):** PV string voltage, current, real-time solar generation (W), and accumulated daily yield (kWh).
   * **🏠 Household Load (`/load`):** Inverter output AC voltage, AC current, household active load power (W), and daily consumed energy (kWh).

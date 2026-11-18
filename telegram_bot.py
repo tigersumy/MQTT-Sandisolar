@@ -47,6 +47,72 @@ EVENT_LOG_FILE = os.path.join(LOG_DIR, "tuya_power_log.json")
 
 BATTERY_SOC_THRESHOLD = int(os.getenv("BATTERY_SOC_THRESHOLD", "95"))
 GRID_CHARGE_SOC_THRESHOLD = int(os.getenv("GRID_CHARGE_SOC_THRESHOLD", "75"))
+BATTERY_NOMINAL_CAPACITY_AH = float(os.getenv("BATTERY_CAPACITY_AH", "100.0"))
+
+def calculate_battery_eta(soc, batt_a, capacity_ah=BATTERY_NOMINAL_CAPACITY_AH):
+    """
+    Calculate estimated time to full charge (100%) or estimated autonomy down to 20% cutoff.
+    Returns dict with mode ('charging', 'discharging', 'idle'), text, speed_pct_hr, time_str.
+    """
+    if abs(batt_a) < 1.0:
+        return {
+            "mode": "idle",
+            "text": "Стан спокою",
+            "speed_pct_hr": 0.0,
+            "time_str": "—"
+        }
+
+    if batt_a >= 1.0:
+        rem_pct = max(0, 100 - soc)
+        speed = (batt_a / capacity_ah) * 100.0  # % per hour
+        if speed > 0.1 and rem_pct > 0:
+            hours = rem_pct / speed
+            h = int(hours)
+            m = int((hours - h) * 60)
+            t_str = f"{h} год {m:02d} хв" if h > 0 else f"{m} хв"
+            return {
+                "mode": "charging",
+                "text": f"~{t_str} до 100%",
+                "speed_pct_hr": speed,
+                "time_str": t_str
+            }
+        else:
+            return {
+                "mode": "charging",
+                "text": "завершення заряду",
+                "speed_pct_hr": speed,
+                "time_str": "< 10 хв"
+            }
+    else:
+        dis_a = abs(batt_a)
+        speed = (dis_a / capacity_ah) * 100.0  # % per hour
+        cutoff_soc = 20
+        usable_pct = max(0, soc - cutoff_soc)
+        if speed > 0.1 and usable_pct > 0:
+            hours = usable_pct / speed
+            h = int(hours)
+            m = int((hours - h) * 60)
+            t_str = f"{h} год {m:02d} хв" if h > 0 else f"{m} хв"
+            return {
+                "mode": "discharging",
+                "text": f"~{t_str} до {cutoff_soc}%",
+                "speed_pct_hr": -speed,
+                "time_str": t_str
+            }
+        elif soc <= cutoff_soc:
+            return {
+                "mode": "discharging",
+                "text": f"резерв ≤ {cutoff_soc}%",
+                "speed_pct_hr": -speed,
+                "time_str": "Критичний"
+            }
+        else:
+            return {
+                "mode": "discharging",
+                "text": "розряджання",
+                "speed_pct_hr": -speed,
+                "time_str": "—"
+            }
 
 # Logger Setup
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -189,13 +255,16 @@ def build_status_card():
 
     t4_badge = f"❄️ T4: {t4:.1f}°C (Холод!)" if t4 < 3.0 else f"T4: {t4:.1f}°C"
 
+    eta_info = calculate_battery_eta(soc, batt_a)
+    eta_inline = f" | ⏳ {eta_info['text']}" if eta_info["mode"] != "idle" else ""
+
     msg = (
         f"{fault_banner}"
         f"📊 <b>Загальний статус SandiSolar</b>\n"
         f"🕒 <i>{now_str}</i>\n\n"
         f"⚡ <b>Мережа:</b> {grid_icon} ({grid_v:.1f} В, {grid_hz:.2f} Гц)\n"
         f"🔌 <b>Інвертор:</b> {'Увімкнено (генерація)' if inv_running else 'Вимкнено (байпас/очікування)'} [<i>{mode_raw}</i>]\n"
-        f"{batt_icon} <b>АКБ:</b> <b>{soc}%</b> ({batt_v:.1f} В, {batt_dir})\n"
+        f"{batt_icon} <b>АКБ:</b> <b>{soc}%</b> ({batt_v:.1f} В, {batt_dir}{eta_inline})\n"
         f"🏠 <b>Споживання будинку:</b> {load_w:.0f} Вт\n"
         f"☀️ <b>Сонячні панелі:</b> {pv_w:.0f} Вт (сьогодні: {pv_today:.2f} кВт·год)\n"
         f"🌡 <b>Температури:</b> T1: {t1:.1f}° | T2: {t2:.1f}° | T3: {t3:.1f}° | {t4_badge}"
@@ -223,6 +292,14 @@ def build_battery_card():
 
     batt_icon = "🔋" if soc >= 30 else "🪫"
 
+    eta_info = calculate_battery_eta(soc, batt_a)
+    if eta_info["mode"] == "charging":
+        eta_section = f"⏱ <b>Прогноз заряду:</b> {eta_info['text']} (+{eta_info['speed_pct_hr']:.1f}%/год)\n"
+    elif eta_info["mode"] == "discharging":
+        eta_section = f"⏱ <b>Прогноз автономності:</b> {eta_info['text']} ({eta_info['speed_pct_hr']:.1f}%/год)\n"
+    else:
+        eta_section = "⏱ <b>Режим батареї:</b> Буферний стан спокою\n"
+
     temp_status = ""
     if t4 < 3.0:
         temp_status = "\n❄️ <b>Холодний захист:</b> Активний (< 3.0 °C — заряд від мережі блокується для захисту LiFePO4)\n"
@@ -239,6 +316,7 @@ def build_battery_card():
         f"📊 <b>Заряд (SOC):</b> <b>{soc}%</b>\n"
         f"⚡ <b>Напруга:</b> {batt_v:.2f} В\n"
         f"🔄 <b>Режим струму:</b> {dir_text}\n"
+        f"{eta_section}"
         f"🔋 <b>BMS Струм:</b> {bms_a:.2f} А\n"
         f"🩺 <b>Стан здоров'я (SOH):</b> {soh}%\n"
         f"🌡 <b>Температура АКБ (T4 BMS):</b> {t4:.1f} °C\n"
